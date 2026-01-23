@@ -1,5 +1,6 @@
-data *
+**/data
 **/.snakemake
+**/log_files
 
 # Ignore data files
 *.pdf
@@ -15,7 +16,7 @@ data *
 *.xls
 *.json
 *.xml
-*.yaml
+#*.yaml
 *.parquet
 *.pq
 *.pickle
