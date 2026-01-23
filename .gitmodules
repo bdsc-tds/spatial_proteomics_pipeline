@@ -1,3 +1,0 @@
-[submodule "analysis/xenium/xenium_analysis_pipeline"]
-	path = analysis/xenium/xenium_analysis_pipeline
-	url = git@github.com:bdsc-tds/xenium_analysis_pipeline.git
