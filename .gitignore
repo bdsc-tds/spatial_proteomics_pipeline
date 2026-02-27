@@ -1,6 +1,7 @@
 **/data
 **/.snakemake
 **/log_files
+**/misc
 
 # Ignore data files
 *.pdf
