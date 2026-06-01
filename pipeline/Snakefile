@@ -74,7 +74,7 @@ rule background_substraction:
     log:
         main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/backsub.log"
     conda:
-        "/path/to/data"
+        "envs/squid_lazy_expl.yaml"
     shell:
         "python scripts/background_substraction/background_substraction.py "
         "--img_path '{input.img}' "
@@ -93,7 +93,7 @@ rule crop_image:
     log:
         main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/crop.log"
     conda:
-        "/path/to/data"
+        "envs/insitupy.yaml"
     shell:
         "python scripts/alignment/image_cropping.py "
         "'{input.img}' "
@@ -114,7 +114,7 @@ rule align_image:
     log:
         main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/align.log"
     conda:
-        "/path/to/data"
+        "envs/insitupy.yaml"
     shell:
         "python scripts/alignment/create_alignment.py "
         "'{input.xenium_path}' "
@@ -131,9 +131,9 @@ rule plot_alignment_and_data:
     output:
         plot = main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/alignment_plot.png"
     conda:
-        "/path/to/data"
+        "envs/insitupy.yaml"
     shell:
-        "python plot_alignment_and_data.py "
+        "python scripts/utils/plot_alignment_and_data.py "
         "'{input.affine_matrix}' "
         "'{input.cropped_img}' "
         "'{output.plot}'"
