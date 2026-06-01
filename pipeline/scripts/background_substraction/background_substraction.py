@@ -1,0 +1,76 @@
+import os
+import argparse
+from backsub import metadata2markers
+from pathlib import Path
+
+def generate_markers_csv(
+    input_img: str,
+    output_dir: str,
+    output_file_name: str = "markers.csv",
+    registration_filter: str = "DAPI",
+    remove_background_channels: bool = False,
+    remove_dapi: bool = False,
+    keep_registration_markername: str = "DAPI",
+):
+    """
+    Generate a markers CSV file from an OME-TIFF image.
+ 
+    Args:
+        input_img:                    Path to the input image stack (.tif).
+        output_dir:                   Directory where the CSV will be written.
+        output_file_name:             Name of the output CSV file (default: markers.csv).
+        registration_filter:          Filter used for image registration (default: DAPI).
+                                      Must match a FluorescenceChannel value in the image metadata.
+        remove_background_channels:   If True, marks background channels with remove=TRUE.
+        remove_dapi:                  If True, marks extra DAPI reference channels with remove=TRUE.
+        keep_registration_markername: Marker name to keep when remove_dapi=True (default: DAPI).
+    """
+    img_path = Path(input_img)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+ 
+    df = metadata2markers.meta_from_file(img_path, registration_filter=registration_filter)
+    df = metadata2markers.assign_background(
+        df,
+        rmv_ref=remove_dapi,
+        rmv_back=remove_background_channels,
+        ref_marker=keep_registration_markername,
+        registration_filter=registration_filter,
+    )
+
+    # if marker_name contains TRICT-autof set background to TRITC-autof and if marker_name contains Cy5-autof set background to Cy5-autof
+    df.loc[df["marker_name"].str.contains("TRITC-autof"), "background"] = "TRITC-autof"
+    df.loc[df["marker_name"].str.contains("Cy5-autof"), "background"] = "Cy5-autof"
+
+    # set remove to true on channels where names = "TRITC-autof" and "Cy5-autof" and background to the None
+    df.loc[df["marker_name"].isin(["TRITC-autof", "Cy5-autof"]), "remove"] = "TRUE"
+    df.loc[df["marker_name"].isin(["TRITC-autof", "Cy5-autof"]), "background"] = None
+
+    # remove markers with names containing "elu" and set remove to true
+    df.loc[df["marker_name"].str.contains("elu"), "remove"] = "TRUE"
+
+    output_path = out_dir / output_file_name
+    df.to_csv(output_path, index=False)
+    print(f"Markers CSV saved to: {output_path}")
+    return df
+
+
+def main(img_path: str, output_dir: str):
+    df = generate_markers_csv(
+        input_img=img_path,
+        output_dir=output_dir,
+        registration_filter="DAPI",
+        remove_background_channels=False,
+        remove_dapi=True,
+        keep_registration_markername="DAPI",
+    )
+    os.system(f"backsub -r '{img_path}' -o '{output_dir}/image.ome.tiff' -m {output_dir}/markers.csv -mo {output_dir}/markerout.csv")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run background subtraction pipeline.")
+    parser.add_argument("--img_path", required=True, help="Path to the input OME-TIFF image file.")
+    parser.add_argument("--output_dir", required=True, help="Directory to save the output files")
+    args = parser.parse_args()
+
+    main(img_path=args.img_path, output_dir=args.output_dir)

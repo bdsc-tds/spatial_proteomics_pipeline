@@ -1,0 +1,161 @@
+configfile: "config.yaml"
+
+import glob
+from itertools import product
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+# wildcard folder path comet only
+main_dir = config["MAIN_DIR"]
+
+SAMPLES = glob_wildcards("/path/to/data")
+HIDS = SAMPLES.hid
+RIDS = SAMPLES.rid
+DATA_TYPE = SAMPLES.data_type
+print("HIDS:", HIDS)
+print("RIDS:", RIDS)
+print("DATA_TYPE:", DATA_TYPE)
+'''
+comb_list = [{
+    "data_type": data_type,
+    "hid": hid,
+    "rid": rid
+    } for data_type, hid, rid in zip(DATA_TYPE, HIDS, RIDS)
+]
+
+# Make frozenset
+comb_listfrzn = { frozenset(x.items()) for x in comb_list }
+
+# Function that filters the combinations which exist
+def filter_combinator(combinator, combs):
+    def filtered_combinator(*args, **kwargs):
+        for wc_comb in combinator(*args, **kwargs):
+            if frozenset(wc_comb) in combs:
+                yield wc_comb
+    return filtered_combinator
+
+combinations = filter_combinator(product, comb_listfrzn)
+
+print("combinations:", list(comb_list), len(list(comb_list)))
+'''
+def get_min_good_matches(wildcards):
+    if wildcards.data_type == "comet_only":
+        return 1
+    return 5
+
+# function to compute the memory RAM dynamically based on whether the job fails
+def get_mem_mb(wildcards, attempt):
+    return attempt * 30000
+    # return attempt * 120000
+
+def get_mem_mb_exp(wildcards, attempt):
+    return attempt**2 * 25000
+
+rule all:
+    input:
+        expand(main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/image.ome.tiff", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid),
+        expand(main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markers.csv", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid),
+        expand(main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markerout.csv", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid),
+        expand(main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.ome.tif", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid),
+        expand(main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.geojson", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid),
+        expand(main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/affine_matrix.csv", zip, data_type=SAMPLES.data_type, hid=SAMPLES.hid, rid=SAMPLES.rid)
+
+
+rule background_substraction:
+    input:
+        img = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{hid}/{rid}/*.ome.tiff".format(data_type=wildcards.data_type, hid=wildcards.hid, rid=wildcards.rid))
+    output:
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/image.ome.tiff",
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markers.csv",
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markerout.csv"
+    resources:
+        mem_mb = get_mem_mb_exp
+    log:
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/backsub.log"
+    conda:
+        "/path/to/data"
+    shell:
+        "python scripts/background_substraction/background_substraction.py "
+        "--img_path '{input.img}' "
+        "--output_dir $(dirname '{output[0]}') > {log} 2>&1"
+
+
+rule crop_image:
+    input:
+        img = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{hid}/{rid}/*.ome.tiff".format(data_type=wildcards.data_type, hid=wildcards.hid, rid=wildcards.rid)),
+        csv_file = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/*.csv".format(data_type=wildcards.data_type, hid=wildcards.hid, rid=wildcards.rid)),
+    output:
+        main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.ome.tif",
+        main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.geojson"
+    resources:
+        mem_mb = get_mem_mb_exp
+    log:
+        main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/crop.log"
+    conda:
+        "/path/to/data"
+    shell:
+        "python scripts/alignment/image_cropping.py "
+        "'{input.img}' "
+        "'{input.csv_file}' "
+        "$(dirname '{output[0]}') > {log} 2>&1"
+
+
+rule align_image:
+    input:
+        xenium_path = lambda wildcards: glob.glob(main_dir + "xenium_rna/processed/segmentation/10x_mm_5um/lung/panel/{hid}/*/normalised_results/outs/".format(hid=wildcards.hid)),
+        cropped_img = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.ome.tif".format(data_type=wildcards.data_type, hid=wildcards.hid, rid=wildcards.rid))
+    output:
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/affine_matrix.csv"
+    resources:
+        mem_mb = get_mem_mb_exp
+    params:
+        min_good_matches = get_min_good_matches
+    log:
+        main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/align.log"
+    conda:
+        "/path/to/data"
+    shell:
+        "python scripts/alignment/create_alignment.py "
+        "'{input.xenium_path}' "
+        "'{input.cropped_img}' "
+        "$(dirname '{output[0]}') "
+        "--min_good_matches_per_area {params.min_good_matches} > {log} 2>&1"
+
+'''
+rule plot_alignment_and_data:
+    # output a png of aligned plots, barplots for cell informations 
+    input:
+        affine_matrix = main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/affine_matrix.csv",
+        cropped_img = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.ome.tif".format(data_type=wildcards.data_type, hid=wildcards.hid, rid=wildcards.rid))
+    output:
+        plot = main_dir + "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/insitupy/alignment_plot.png"
+    conda:
+        "/path/to/data"
+    shell:
+        "python plot_alignment_and_data.py "
+        "'{input.affine_matrix}' "
+        "'{input.cropped_img}' "
+        "'{output.plot}'"
+'''
+
+'''
+
+rule segmentation_mesmer:
+    # for now only on backsubed images
+    input:
+        img = lambda wildcards: glob.glob(main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{sample}/*.ome.tiff".format(data_type=wildcards.data_type, sample=wildcards.sample))
+    output:
+        main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{sample}/test.txt"
+    log:
+        main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{sample}/test.log"
+    conda:
+        "/path/to/data"
+    shell:
+        """
+        bash test.sh "test" > {output}
+        """
+
+
+# rule npy_to_geojson:
+    '''
