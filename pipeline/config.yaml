@@ -1,1 +1,48 @@
-MAIN_DIR: "/path/to/data"
+main_dir: "/path/to/data"
+
+# --- Pipeline Path Templates ---
+paths:
+  # Raw Image
+  img: "lunaphore_protein/raw/{data_type}/uncropped/{hid}/{rid}/*.ome.tiff"
+
+  # Background Substraction
+  backsub_img: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/image.ome.tiff"
+  backsub_markers: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markers.csv"
+  backsub_markerout: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/markerout.csv"
+  backsub_log: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/background_substraction/backsub/backsub.log"
+
+  # Cropping Image
+  cropped_coordinates: "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/*.csv"
+  cropped_img: "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.ome.tif"
+  cropped_geojson: "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/image_cropped.geojson"
+  cropped_log: "lunaphore_protein/raw/{data_type}/cropped/{hid}/{rid}/crop.log"
+
+  # Image Alignment
+  xenium_outs: "xenium_rna/processed/segmentation/10x_mm_5um/lung/panel/{hid}/*/normalised_results/outs/"
+  align_matrix: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/{align}/affine_matrix.csv"
+  align_log: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/{align}/align.log"
+
+  # Plot Aligned Images
+  xenium_adata: "xenium_rna/processed/joint_scanpy_analysis/proseg_expected/lung/panel/{hid}/*/raw_spatialdata.h5ad"
+  plot_aligned_samples: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/{align}/plots/{segment}_aligned_samples.png"
+  plot_aligned_bar: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/{align}/plots/{segment}_bar_plot.png"
+  plot_aligned_log: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/image_alignment/{align}/plots/{segment}_plot.log"
+
+  # Cell Segmentation
+  seg_csv: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/segmentation/{segment}/feature_table.csv"
+  seg_log: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/segmentation/{segment}/{segment}_segmentation.log"
+  
+  # Mesmer Segmentation Specific Files
+  seg_npy: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/segmentation/{segment}/cell_boundaries_mask.npy"
+  seg_txt: "lunaphore_protein/processed/{data_type}/{hid}/{rid}/segmentation/{segment}/channels.txt"
+
+  # Numpy File To Geojson
+  conversion_geojson_file: "lunaphore_protein/raw/{data_type}/{hid}/{rid}/segmentation/{segment}/cell_boundaries.geojson"
+  conversion_log: "lunaphore_protein/raw/{data_type}/{hid}/{rid}/segmentation/{segment}/mask_conversion.log"
+
+align_methods:
+  - "insitupy"
+
+segmentation_methods:
+  - "horizon"
+  - "mesmer"

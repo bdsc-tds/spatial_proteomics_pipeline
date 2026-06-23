@@ -4,35 +4,8 @@ from insitupy.io import read_xenium
 from insitupy.tools import register_images
 import numpy as np
 import os
-import tifffile
 import shutil
-import xml.etree.ElementTree as ET
-
-def get_channels(image_path):
-    '''
-    Extracts the channel names from the OME-XML metadata of a
-    multi-channel TIFF image.
-    
-    Parameters:
-    - image_path: str, path to the input multi-channel TIF image.
-    '''
-    with tifffile.TiffFile(image_path) as tif:
-        print("File opened successfully.")
-        # OME metadata is stored in the description tag of the first page
-        xml_data = tif.pages[0].description
-        
-        # Parse the XML
-        root = ET.fromstring(xml_data)
-        
-        # OME-XML uses namespaces, we need to account for them
-        namespace = {'ome': 'http://www.openmicroscopy.org/Schemas/OME/2016-06'}
-        
-        # Find all Channel elements and get their 'Name' attribute
-        # it is crucial that the channel names order is equal to how the channels appear in the image 
-        # the reference channel is taken not by name but by index
-        channels = root.findall('.//ome:Channel', namespace)
-        channel_names = [c.attrib.get('Name') for c in channels]
-    return channel_names
+from utils import get_channels
 
 def remove_excess_files(root_dir):
     '''
@@ -44,7 +17,6 @@ def remove_excess_files(root_dir):
     '''
     print("Removing excess files.")
     normalized_dir = os.path.join(root_dir, 'normalised_results')
-
     # Find and move the alignment matrix CSV to the root directory
     csv_files = glob.glob(
         os.path.join(normalized_dir, '**', '*_T.csv'),
@@ -57,12 +29,9 @@ def remove_excess_files(root_dir):
         shutil.move(csv_files[0], dest)
         print(f"Moved alignment matrix: {os.path.basename(csv_files[0])} → {root_dir}")
         print(f"Alignment matrix saved to affine_matrix.csv")
-
     # Remove all subdirectories inside normalised_results
-
     shutil.rmtree(normalized_dir)
     print(f"Removed folder: {normalized_dir}")
-
     print("Cleanup complete.")
 
 def align_matrix(xd_path, image_path, output_dir, min_good_matches_per_area=5):
@@ -79,35 +48,38 @@ def align_matrix(xd_path, image_path, output_dir, min_good_matches_per_area=5):
     - image_path: str, path to import the Comet data, should be the exact file
     - min_good_matches_per_area: int, minimum matches needed per 5mm² areas, to complete the alignment
     """
-
     xd = read_xenium(xd_path)
-
     channel_names = get_channels(image_path)
     print(f"Channel names extracted from OME-XML: {channel_names}")
-        # First channel whatever its name
-    first_channel = channel_names[0]
 
+    # First channel whatever its name
+    first_channel = channel_names[0]
     # First channel that is different from the first one
     second_channel = next(c for c in channel_names if c != first_channel)
-
     selected_channels = [first_channel, second_channel]
     print(selected_channels)
+    
     # create folder for aligned images
-    output_dir = os.path.join(output_dir, 'normalised_results')
-    os.makedirs(output_dir, exist_ok=True)
-    register_images(data=xd, 
-        image_to_be_registered=image_path,
-        axes_image="CYX",
-        channel_names=selected_channels,
-        channel_name_for_registration=channel_names[0],
-        template_image_name="nuclei",
-        axes_template="YX",
-        output_dir=output_dir,
-        save_registered_images=True,
-        min_good_matches_per_area=min_good_matches_per_area
-        )
-    print("Image registration done!")
-    print(f"Output directory: {output_dir}")
+    normalised_dir = os.path.join(output_dir, 'normalised_results')
+    os.makedirs(normalised_dir, exist_ok=True)
+    try:
+        register_images(data=xd, 
+            image_to_be_registered=image_path,
+            axes_image="CYX",
+            channel_names=selected_channels,
+            channel_name_for_registration=channel_names[0],
+            template_image_name="nuclei",
+            axes_template="YX",
+            output_dir=normalised_dir,
+            save_registered_images=True,
+            min_good_matches_per_area=min_good_matches_per_area
+            )
+        print("Image registration done!")
+        print(f"Output directory: {output_dir}")
+    except Exception as e:
+        print(f"Alignment failed for {image_path}: {e}")
+        remove_excess_files(output_dir)
+        raise
 
 def main():
     parser = argparse.ArgumentParser(description="Align Comet on Xenium images.")

@@ -3,6 +3,7 @@ import geopandas as gpd
 import glob
 from insitupy.io import read_xenium
 from insitupy.tools import register_images
+from ome_types import from_xml, to_xml
 import os
 import pandas as pd
 import tifffile
@@ -29,7 +30,27 @@ def crop_image(image_path, output_dir, crop_coords):
     print("Loaded file")
     # Crop the image using the specified coordinates
     cropped_img = data[:, ymin:ymax, xmin:xmax]
+    '''
+    new_y = ymax - ymin
+    new_x = xmax - xmin
 
+    if ome_xml:
+        try:
+            ome = from_xml(ome_xml)
+            ome.images[0].pixels.size_x = new_x
+            ome.images[0].pixels.size_y = new_y
+            ome_xml = to_xml(ome)
+            greek_map = {
+                'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'δ': 'delta',
+                'ε': 'epsilon', 'κ': 'kappa', 'λ': 'lambda', 'μ': 'mu',
+                'µ': 'mu', 'π': 'pi', 'σ': 'sigma', 'τ': 'tau',
+            }
+            for greek, latin in greek_map.items():
+                ome_xml = ome_xml.replace(greek, latin)
+        except Exception as e:
+            print(f"Error updating OME-XML metadata: {e}")
+            ome_xml = None
+    print(ome_xml) '''
     # Save the cropped image as a new TIFF file
     cropped_path = os.path.join(output_dir, "image_cropped.ome.tif")
     os.makedirs(os.path.dirname(cropped_path), exist_ok=True)
