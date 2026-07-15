@@ -76,14 +76,14 @@ def plot_aligned_samples(main_dir, xenium_file, data_type, hid, rid, segmentatio
     # put in a dataframe ncells for aligment
     df_align = pd.DataFrame({"ncells": [xenium_adata.n_obs, mapped_adata.n_obs,
                                         mapped, unmapped],
-                            "modality": ["Xenium", "comet_postXenium", "mapped", "unmapped"]})
-    df_align["modality"] = pd.Categorical(df_align["modality"], categories=["Xenium", "comet_postXenium", "mapped", "unmapped"], ordered=True)
+                            "modality": ["Xenium", "comet", "mapped", "unmapped"]})
+    df_align["modality"] = pd.Categorical(df_align["modality"], categories=["Xenium", "comet", "mapped", "unmapped"], ordered=True)
     print(f"{hid}|{rid}|{data_type}|{segmentation_method}|{align_method}")
     print(df_align)
 
     cols_mapped = {
         'Xenium': '#19618A', 
-        'comet_postXenium': '#09B39C', # (Your existing teal/green)
+        'comet': '#09B39C', # (Your existing teal/green)
         'mapped': '#FFB300',     # Bright Amber/Yellow
         'unmapped': '#D32F2F'   # Strong, Clear Red
     }

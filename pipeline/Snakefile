@@ -11,14 +11,13 @@ from pprint import pprint
 main_dir = config['main_dir']
 ALIGN = config['align_methods']
 SEGMENT = config['segmentation_methods']
-# SEGMENT = ["horizon"]
 
 SAMPLES = glob_wildcards(main_dir + "lunaphore_protein/raw/{data_type}/uncropped/{hid}/{rid}/{sample_name}.ome.tiff")
 
 filtered_tuples = [
     (dt, hid, rid) 
     for dt, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid) 
-    if hid == "sample_01" and dt == 'postXenium'
+    if dt == 'postXenium'
 ]
 
 # 3. Reconstruct your SAMPLES object (or a custom object) for your expand functions
@@ -29,7 +28,6 @@ class SampleConfig:
         self.rid = [t[2] for t in tuples]
 
 SAMPLES = SampleConfig(filtered_tuples)
-print(SAMPLES)
 
 def get_path(key):
     return os.path.join(config["main_dir"],config["paths"][key])
@@ -80,7 +78,17 @@ rule all:
             for segment in SEGMENT
         ],
         [
-            get_path("seg_npy").format(**locals())
+            get_path("seg_npy_cells").format(**locals())
+            for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
+            for segment in ["mesmer"]
+        ],
+        [
+            get_path("seg_npy_nuclei").format(**locals())
+            for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
+            for segment in ["mesmer"]
+        ],
+        [
+            get_path("seg_npy_cytoplasm").format(**locals())
             for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
             for segment in ["mesmer"]
         ],
@@ -92,7 +100,17 @@ rule all:
 
         # convert mask to geojson
         [
-            get_path("conversion_geojson_file").format(**locals())
+            get_path("conversion_geojson_cells_file").format(**locals())
+            for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
+            for segment in ["mesmer"]
+        ],
+        [
+            get_path("conversion_geojson_nuclei_file").format(**locals())
+            for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
+            for segment in ["mesmer"]
+        ],
+        [
+            get_path("conversion_geojson_cytoplasm_file").format(**locals())
             for data_type, hid, rid in zip(SAMPLES.data_type, SAMPLES.hid, SAMPLES.rid)
             for segment in ["mesmer"]
         ],
@@ -109,7 +127,7 @@ rule background_substraction:
     log:
         get_path("backsub_log")
     conda:
-        "envs/squid_lazy_expl.yaml"
+        "envs/backsub.yaml"
     shell:
         "python scripts/background_substraction/background_substraction.py "
         "--img_path '{input.img}' "
@@ -164,21 +182,31 @@ rule align_image:
 rule plot_alignment_and_data:
     # output a png of aligned plots, barplots for cell informations 
     input:
+        #  xenium adata for comparison and plots
         xenium_path = lambda wildcards: glob.glob(get_path("xenium_adata").format(hid=wildcards.hid)),
+        
+        # segmentation csv file for centroid positions
         csv_file = get_path("seg_csv"),
+        
+        # matrix used to align images
         affine_matrix = rules.align_image.output.affine_matrix
     output:
+        # plot aligned samples and barplots
         aligned = get_path("plot_aligned_samples"),
         bar = get_path("plot_aligned_bar")
     resources:
+        # if the job fails, retry with more memory
         mem_mb = get_mem_mb_exp
+    params:
+        # to avoid trailing slash issues
+        main_dir=lambda wildcards: config["main_dir"].rstrip("/")
     log:
         get_path("plot_aligned_log")
     conda:
         "envs/squid_lazy_expl.yaml"
     shell:
         "python scripts/utils/plot_aligned_samples.py "
-        "{main_dir}/lunaphore_protein/ "
+        "{params.main_dir}/lunaphore_protein/ "
         "{input.xenium_path} "
         "{wildcards.data_type} "
         "{wildcards.hid} "
@@ -192,7 +220,9 @@ rule segmentation_mesmer:
         markers_out_csv = rules.background_substraction.output.markers_out_csv
     output:
         csv_file = get_path("seg_csv"),
-        npy_file = get_path("seg_npy"),
+        npy_cells_file = get_path("seg_npy_cells"),
+        npy_nuclei_file = get_path("seg_npy_nuclei"),
+        npy_cytoplasm_file = get_path("seg_npy_cytoplasm"),
         channels = get_path("seg_txt")
     wildcard_constraints:
         segment = "mesmer"
@@ -210,14 +240,26 @@ rule segmentation_mesmer:
 
 rule npy_to_geojson:
     input: 
-        npy_file = rules.segmentation_mesmer.output.npy_file
+        npy_cells_file = rules.segmentation_mesmer.output.npy_cells_file,
+        npy_nuclei_file = rules.segmentation_mesmer.output.npy_nuclei_file,
+        npy_cytoplasm_file = rules.segmentation_mesmer.output.npy_cytoplasm_file
     output:
-        geojson_file = get_path("conversion_geojson_file")
+        geojson_cells_file = get_path("conversion_geojson_cells_file"),
+        geojson_nuclei_file = get_path("conversion_geojson_nuclei_file"),
+        geojson_cytoplasm_file = get_path("conversion_geojson_cytoplasm_file")
+    resources:
+        mem_mb = get_mem_mb_exp
     log:
         get_path("conversion_log")
     conda:
         "envs/squid_lazy_expl.yaml"
     shell:
         "python scripts/utils/convert_mask.py "
-        "{input.npy_file} "
-        "{output.geojson_file} > {log} 2>&1"
+        "{input.npy_cells_file} "
+        "{output.geojson_cells_file} > {log} 2>&1 && "
+        "python scripts/utils/convert_mask.py "
+        "{input.npy_nuclei_file} "
+        "{output.geojson_nuclei_file} >> {log} 2>&1 && "
+        "python scripts/utils/convert_mask.py "
+        "{input.npy_cytoplasm_file} "
+        "{output.geojson_cytoplasm_file} >> {log} 2>&1"

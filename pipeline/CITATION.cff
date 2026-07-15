@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Lunaphore COMET - Xenium Image Processing Pipeline"
+abstract: >
+  A Snakemake workflow for preparation of Lunaphore multiplexed
+  protein imaging data matched to 10x Xenium spatial transcriptomics data.
+authors:
+  - family-names: "Genet"
+    given-names: "Grégoire"
+    affiliation: "BDSC"
+  - family-names: "Beneyto Calabuig"
+    given-names: "Sergi"
+    affiliation: "BDSC"
+  # orcid: "https://orcid.org/0000-0000-0000-0000"
+  # Add additional authors as needed:
+  # - family-names: "[Last Name]"
+  #   given-names: "[First Name]"
+  #   affiliation: "[Institution / Lab]"
+repository-code: "link to the repository"
+url: "https://github.com/[org]/[repo]"
+license: MIT
+version: "1.0.0"
+date-released: "2026-07-15"
+keywords:
+  - snakemake
+  - spatial-transcriptomics
+  - spatial-proteomics
+  - multiplexed-imaging
+  - xenium
+  - cell-segmentation
+  - image-registration
+  - bioinformatics

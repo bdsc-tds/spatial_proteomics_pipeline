@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import os
 import pandas as pd
+from pathlib import Path
 import spacec as sp
 import tifffile
 import warnings
@@ -56,6 +57,16 @@ def mesmer_segmentation(img, markerout, output_dir):
         size_cutoff = 0)
 
     print(seg_output1.keys())
+
+    # rename combined csv in feature_table.csv
+    src = Path(os.path.join(output_dir, "feature_table_combined_features.csv"))
+    dst = Path(os.path.join(output_dir, "feature_table.csv"))
+
+    if os.path.exists(src):
+        src.rename(dst)
+    else:
+        print("CSV Files were not created.")
+
     # Save segmentation masks output as npy
     np.save(os.path.join(output_dir, 'cell_boundaries_mask.npy'), seg_output1["masks"])
     np.save(os.path.join(output_dir, 'nuclei_boundaries_mask.npy'), seg_output1["masks_nuclei"])
