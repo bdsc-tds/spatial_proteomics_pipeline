@@ -28,13 +28,23 @@ Where:
 
 ## Requirements
 
-- [Snakemake](https://snakemake.readthedocs.io/) (with `conda`/`mamba` support)
+- [Snakemake](https://snakemake.readthedocs.io/) = 9.20.0 (with `conda`/`mamba` support)
 - Conda/mamba for environment management
 - Python 3, plus the following per-rule conda environments (provided under `envs/`):
   - `envs/backsub.yaml`
   - `envs/insitupy.yaml`
   - `envs/spacec.yaml`
   - `envs/squid_lazy_expl.yaml`
+
+### Activate the snakemake environment
+The environments above are used as individual rules, but you still need snakemake itself installed to launch the workflow in the first place. A `sp-pipeline.yaml` is provided in the `envs` folder exactly for this purpose:
+
+```bash
+conda env create -f envs/sp-pipeline.yaml
+conda activate sp-pipeline
+```
+
+This install the right version of snakemake to launch the program. Once activated, you can run the pipeline as described below.
 
 ## Configuration
 

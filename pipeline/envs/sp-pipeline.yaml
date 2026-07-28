@@ -1,0 +1,9 @@
+name: sp-pipeline
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - snakemake-minimal=9.20.0
+  - mamba          # optional but strongly recommended: speeds up --use-conda env creation
+  - pip

@@ -37,7 +37,7 @@ def remove_excess_files(root_dir):
 def align_matrix(xd_path, image_path, output_dir, min_good_matches_per_area=5):
     """
     Creates the aligned matrix between Xenium and Comet and saves it in the
-    save directory as the comet sample.
+    same directory as the comet sample.
     If the samples aligned are not from the same slice, try to decrease the
     'min_good_matches_per_area' parameter, to allow the alignment to be done
     with fewer matches. If 1 is not enough, the samples are likely too
