@@ -502,9 +502,10 @@ dependencies:
       - muon==0.1.7
       - ome-types==0.6.3
       - palettable==3.3.3
+      - plotnine==0.15.6
       - pluggy==1.6.0
       - protobuf==6.33.1
-      - pycomplexheatmap==1.8.3.post8
+      - pycomplexheatmap==1.8.5
       - pydantic==2.12.5
       - pydantic-core==2.41.5
       - pydantic-extra-types==2.10.6

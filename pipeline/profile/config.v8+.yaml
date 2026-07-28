@@ -6,6 +6,8 @@ executor: cluster-generic
 # this allows for resources to be specified in the rules in the Snakefile. They can also be set in this file as with profiles (see below)
 cluster-generic-submit-cmd:
   sbatch
+    --partition={resources.partition}
+    --account={resources.account}
     --qos={resources.qos}
     --cpus-per-task={threads}
     --job-name=smk-{rule}
@@ -14,12 +16,13 @@ cluster-generic-submit-cmd:
     --error=log_files/stderr_sk_submission.err
     --mem={resources.mem_mb}
     --time={resources.runtime}
+    {resources.slurm_extra}
 
 
 # this enables to cancel all jobs submitted by the pipeline when you cancel scancel the bash script running Snakemake
 # important to specify the conda prefix to the work directory (otherwise the env is installed in the /path/to/home folder...)
 jobs: 500
-retries: 5
+retries: 3
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
 printshellcmds: True
@@ -33,8 +36,8 @@ rerun-incomplete: true
 # #apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data,/path/to/home,/tmp/user:/tmp" # needs to be specified the 1st time to create conda envs
 # apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data,/path/to/home"
 conda-prefix: '/path/to/data'
-# logger: snkmt
-# logger-snkmt-db: /path/to/home
+logger: snkmt
+logger-snkmt-db: /path/to/home
 latency-wait: 120
 use-singularity: true
 use-conda: true
@@ -47,14 +50,17 @@ default-resources:
   cores: 1
   mem_mb: 5120
   runtime: 1440
+  slurm_extra: ""
 
 set-resources:
-  crop_image:
-    mem_mb: 60000
   align_image:
-    mem_mb: 60000
-  mesmer_segmentation:
-    # mem_mb: 256000
+    partition: gpu
+    cores: 4
+    runtime: 2880
+    qos: gpu-normal
+    slurm_extra: "--gres=gpu:1"
+  segmentation_mesmer:
+    mem_mb: 128000
     partition: gpu
     cores: 4
     runtime: 2880
