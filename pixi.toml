@@ -78,6 +78,8 @@ tifffile = "<2025.5.10"
 zarr = "<3"
 pandas = "*"
 tqdm = "*"
+# system library behind pyvips, which SPACEc imports at load time through tissuumaps
+libvips = "*"
 
 [feature.spacec.pypi-dependencies]
 spacec = ">=0.1.2, <0.2"

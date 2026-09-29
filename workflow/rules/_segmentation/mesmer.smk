@@ -6,6 +6,12 @@
 segmentation_dir = OUT + "/segmentation/{seg_method}/{sample_id}/"
 mesmer_dir = OUT + "/segmentation/mesmer/{sample_id}/"
 
+
+def gpu_threads(gpu=1, cpu=8):
+    """Threads for a GPU rule: few when the GPU does the work, more when it falls back to CPU."""
+    return gpu if GPU else cpu
+
+
 rule segmentation_mesmer:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/mesmer.py",
@@ -18,11 +24,11 @@ rule segmentation_mesmer:
         nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
         model_dir=config["segmentation"]["mesmer_model_dir"],
-    threads: 4
+    threads: gpu_threads(gpu=1, cpu=8)
     resources:
         # Mesmer holds the nuclear and combined membrane planes plus its outputs in memory
-        runtime=1440,
-        mem='128G',
+        runtime=360,
+        mem='64G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

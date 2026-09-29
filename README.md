@@ -9,17 +9,6 @@ The pipeline is technology-agnostic: everything technology-specific (image forma
 pixel size, which channels to segment on) is read from the image or set per panel in
 `experiments.yml`.
 
-## Steps
-
-| Switch (`run:`) | Rules | What it does |
-|---|---|---|
-| `image_preparation` | `prepare_image` | Reads the raw image (qptiff or OME-TIFF) one channel at a time; writes the channel table, a DAPI image and a small segmentation input (nuclear + membrane channels) |
-| `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/). When on, all later steps read the subtracted image |
-| `segmentation` | `segmentation_mesmer`, `quantify_cells`, `mask_to_geojson` | Mesmer (deepcell, through SPACEc) nucleus / whole-cell / cytoplasm masks; per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
-| `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
-
-Switches select what is built; upstream steps still run when a switched-on step needs them.
-
 ## Data layout
 
 Raw images, one per sample folder:
@@ -45,17 +34,10 @@ processed/
 
 ## Setup
 
-The pipeline runs on the Curnagl SLURM cluster; every rule runs inside one Apptainer image that holds
-the pixi environments:
+The pipeline is designed to run on HPC clusters and has been tested with SLURM. Every rule runs
+inside one Apptainer image that holds the pixi environments.
 
-| pixi environment | Used by |
-|---|---|
-| `default` | image preparation, background subtraction, quantification, GeoJSON, insitupy alignment, plots, `update-experiments` |
-| `spacec` | Mesmer segmentation (deepcell / TensorFlow 2.8 need python 3.10 and numpy < 2) |
-| `snakemake` | the Snakemake driver itself (runs outside the container) |
-
-1. Install the environments locally (the `snakemake` one launches the pipeline, `default` runs
-   `update-experiments`):
+1. Install the `snakemake` and `default` environments locally:
    ```bash
    pixi install -e snakemake -e default
    ```
@@ -68,33 +50,38 @@ the pixi environments:
 
 ## Configuration
 
-One folder per dataset under `config/`, e.g. `config/configs_codex/`:
+One folder per dataset under `config/`, e.g. `config/configs_codex/`, holding a `config.yml` and an
+`experiments.yml`.
 
-- **`config.yml`**: `output_path`, the container, the `run:` switches and method settings
-  (segmentation / alignment methods, Mesmer model folder, matching distance, GPU partition).
-- **`experiments.yml`**: the samples, as tissue → panel → donor → `[samples]`. Keys starting with `_`
-  are metadata:
+### config.yml
 
-  ```yaml
-  _base_path: /path/to/codex/raw                 # raw images
-  _xenium_base_path: /path/to/xenium/raw         # optional: Xenium runs of the same slides
-  NSCLC:
-    human_IO60_metabolism:
-      _technology: codex
-      _image_ext: qptiff                          # image file extension in each sample folder
-      _pixel_size_um: 0.5073566                   # fallback when the image carries no pixel size
-      _nuclear_channel: DAPI
-      _membrane_channels: [Pan-Cytokeratin, E-cadherin, CD45, Vimentin, CD31, SMA]   # Mesmer whole-cell signal
-      _background_subtraction: false              # COMET only
-      donor_01: [donor_01]          # donor: [samples]
-  ```
+`output_path`, the container, the `run:` switches and method settings (segmentation / alignment
+methods, Mesmer model folder, matching distance, GPU partition).
 
 `config/config.yml` is a symlink to the active dataset's config (see [config/README.md](config/README.md)).
 
-### Creating / updating experiments.yml
+### experiments.yml
 
-Do not write the sample list by hand: generate it from the raw data folder, before the first run and
-whenever new samples arrive:
+The samples, as tissue → panel → donor → `[samples]`. Keys starting with `_` are metadata:
+
+```yaml
+_base_path: /path/to/codex/raw                 # raw images
+_xenium_base_path: /path/to/xenium/raw         # optional: Xenium runs of the same slides
+NSCLC:
+  human_IO60_metabolism:
+    _technology: codex
+    _image_ext: qptiff                          # image file extension in each sample folder
+    _pixel_size_um: 0.5073566                   # fallback when the image carries no pixel size
+    _nuclear_channel: DAPI
+    _membrane_channels: [Pan-Cytokeratin, E-cadherin, CD45, Vimentin, CD31, SMA]   # Mesmer whole-cell signal
+    _background_subtraction: false              # COMET only
+    donor_01: [donor_01]          # donor: [samples]
+```
+
+#### Creating / updating experiments.yml
+
+The file can be written by hand, or generated from the raw data folder with `update-experiments`
+(before the first run and whenever new samples arrive):
 
 ```bash
 pixi run update-experiments --config config/configs_codex/config.yml --dry-run   # show changes
@@ -122,18 +109,25 @@ from experiments.yml.
 ```bash
 ./run.sh -n                                              # dry run: list the jobs
 ./run.sh                                                 # run with the active config
-./run.sh --configfile config/configs_comet/config.yml    # another dataset
 ./run.sh <rule or output file>                           # only that target
 ```
 
 `run.sh` loads `singularityce`, starts Snakemake from the `snakemake` pixi environment with the SLURM
 profile (`profiles/slurm/`, one job per rule, cluster-generic executor) and `--sdm apptainer`, and
-stores the monitoring database in `{output_path}/snkmt.db`. The Snakemake driver keeps running while
-jobs are queued, so start it in a persistent session (e.g. `tmux`/`screen`). Each rule's messages are
-in the `logs/` folder next to its outputs.
+stores the monitoring database in `{output_path}/snkmt.db`. 
 
-Mesmer runs on the `gpu` partition (set `gpu: available: false` in the config to use CPUs). Its
-log states whether TensorFlow sees the GPU.
+Some rules run on the `gpu` partition:  (set `gpu: available: false` in the config to use CPUs). 
+
+## Steps
+
+| Switch (`run:`) | Rules | What it does |
+|---|---|---|
+| `image_preparation` | `prepare_image` | Reads the raw image (qptiff or OME-TIFF) one channel at a time; writes the channel table, a DAPI image and a small segmentation input (nuclear + membrane channels) |
+| `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/). When on, all later steps read the subtracted image |
+| `segmentation` | `segmentation_mesmer`, `quantify_cells`, `mask_to_geojson` | Mesmer (deepcell, through SPACEc) nucleus / whole-cell / cytoplasm masks; per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
+| `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
+
+Switches select what is built; upstream steps still run when a switched-on step needs them.
 
 ## Extending
 
@@ -142,10 +136,6 @@ log states whether TensorFlow sees the GPU.
   `workflow/scripts/utils/readwrite.py`; another format only needs support there.
 - **New dataset:** copy `config/configs_codex/` to `config/configs_<name>/` and adapt `output_path`,
   `_base_path` and the switches.
-- **New segmentation method:** add `workflow/rules/_segmentation/<method>.smk` with a rule writing
-  `{output_path}/segmentation/<method>/{sample_id}/{cell,nuclei,cytoplasm}_boundaries_mask.npy`, include
-  it in `workflow/rules/segmentation.smk` and add the method to `segmentation: methods`;
-  quantification, GeoJSON export and the alignment plots then work for it unchanged.
 
 ## Repository layout
 

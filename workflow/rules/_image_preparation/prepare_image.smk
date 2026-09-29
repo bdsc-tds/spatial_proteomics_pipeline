@@ -10,7 +10,8 @@ rule prepare_image:
     output:
         channels=image_preparation_dir + "channels.csv",
         dapi=image_preparation_dir + "dapi.ome.tif",
-        segmentation_input=image_preparation_dir + "segmentation_input.ome.tif",
+        # only read by segmentation, deleted once every segmentation job has used it
+        segmentation_input=temp(image_preparation_dir + "segmentation_input.ome.tif"),
     params:
         nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
@@ -41,4 +42,5 @@ rule prepare_image:
 
 rule image_preparation_all:
     input:
-        expand(rules.prepare_image.output, sample_id=SAMPLE_IDS),
+        # the temporary segmentation input is left out so that it is not kept as a final target
+        expand([rules.prepare_image.output.channels, rules.prepare_image.output.dapi], sample_id=SAMPLE_IDS),
