@@ -36,8 +36,14 @@ def parse_args():
 
 def main():
     args = parse_args()
+    import skimage.io
     import spacec as sp
     import tensorflow as tf
+    import tifffile
+
+    # SPACEc loads the image with skimage.io.imread, which moves 3- or 4-channel stacks to
+    # channels-last (read as RGB/RGBA) and then fails its (C, Y, X) check; tifffile keeps (C, Y, X)
+    skimage.io.imread = tifffile.imread
 
     # report whether TensorFlow sees the GPU (Mesmer silently falls back to CPU otherwise)
     print(f"TensorFlow {tf.__version__}, GPUs visible: {tf.config.list_physical_devices('GPU')}")
