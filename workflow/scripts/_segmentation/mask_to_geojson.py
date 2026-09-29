@@ -4,7 +4,10 @@ import argparse
 import colorsys
 import json
 import numpy as np
+from functools import reduce
 from pathlib import Path
+from shapely.geometry import MultiPolygon, Polygon, mapping
+from shapely.geometry.polygon import orient
 from skimage import measure
 
 from skimage import measure, filters
@@ -38,6 +41,26 @@ def extract_contours_smooth(crop, r0, c0):
         adjusted.append([[float(p[0]), float(p[1])] for p in shifted])
     
     return adjusted
+
+def rings_to_geometry(rings):
+    """
+    GeoJSON geometry of one label from its closed contour rings.
+    Rings nested inside another ring are holes (even-odd rule), so e.g. a cytoplasm ring
+    becomes one polygon with the nucleus as a hole instead of two filled polygons.
+    """
+    # the 0.5 isolines never cross, so XOR-ing the ring polygons yields the even-odd fill
+    polygons = [Polygon(r) for r in rings]
+    polygons = [p if p.is_valid else p.buffer(0) for p in polygons]
+    geometry = reduce(lambda a, b: a.symmetric_difference(b), polygons)
+
+    # counter-clockwise exteriors and clockwise holes, as RFC 7946 recommends
+    if isinstance(geometry, Polygon):
+        geometry = orient(geometry)
+    elif isinstance(geometry, MultiPolygon):
+        geometry = MultiPolygon([orient(p) for p in geometry.geoms])
+    else:
+        return None
+    return None if geometry.is_empty else mapping(geometry)
 
 def label_to_hex(label: int) -> str:
     golden = 0.618033988749895
@@ -85,11 +108,11 @@ def mask_to_geojson(npy_path, output_path=None, min_pixels=5):
             skipped += 1
             continue
 
-        # ✅ Fixed MultiPolygon structure
-        if len(rings) == 1:
-            geometry = {"type": "Polygon", "coordinates": rings}
-        else:
-            geometry = {"type": "MultiPolygon", "coordinates": [[ring] for ring in rings]}
+        # polygon(s) with holes from the rings
+        geometry = rings_to_geometry(rings)
+        if geometry is None:
+            skipped += 1
+            continue
 
         features.append({
             "type": "Feature",

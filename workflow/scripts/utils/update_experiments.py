@@ -118,7 +118,8 @@ def main():
 
     # scan raw sample folders
     default_exts = [args.image_ext] if args.image_ext else DEFAULT_IMAGE_EXTS
-    scanned = scan_raw_samples(base_path, get_panel_exts(experiments), default_exts)
+    panel_exts = get_panel_exts(experiments)
+    scanned = scan_raw_samples(base_path, panel_exts, default_exts)
     with_image = {k: v[0] for k, v in scanned.items() if len(v) == 1}
     no_image = [k for k, v in scanned.items() if not v]
     multi_image = {k: v for k, v in scanned.items() if len(v) > 1}
@@ -132,8 +133,11 @@ def main():
         tissue_node = child(experiments, tissue)
         if tissue_node.get(panel) is None:
             panel_node = copy.deepcopy(template) if template else CommentedMap(PANEL_TEMPLATE)
-            # the extension always comes from the image actually found, not from the template panel
-            panel_node["_image_ext"] = max((e for e in default_exts if image.endswith("." + e)), key=len)
+            # the extension always comes from the image actually found, not from the template panel,
+            # out of the extensions the scan used for this panel name (it may already be declared by
+            # the same panel in another tissue)
+            scan_exts = [panel_exts[panel]] if panel in panel_exts else default_exts
+            panel_node["_image_ext"] = max((e for e in scan_exts if image.endswith("." + e)), key=len)
             tissue_node[panel] = panel_node
         panel_node = tissue_node[panel]
         if not isinstance(panel_node.get(donor), list):

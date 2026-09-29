@@ -4,7 +4,7 @@ background_subtraction_dir = OUT + "/background_subtraction/{sample_id}/"
 
 rule background_subtraction:
     input:
-        script=f"{workflow.basedir}/scripts/_background_subtraction/backsub.py",
+        script=f"{workflow.basedir}/scripts/_background_subtraction/run_backsub.py",
         image=lambda wc: SAMPLES[wc.sample_id]["image"],
     output:
         image=BACKSUB_IMAGE,

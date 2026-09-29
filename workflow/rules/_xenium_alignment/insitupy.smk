@@ -53,6 +53,7 @@ rule plot_alignment:
         overlay=xenium_alignment_dir + "figures/{seg_method}_overlay.png",
         counts=xenium_alignment_dir + "figures/{seg_method}_counts.png",
     params:
+        xenium_dir=xenium_dir,
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
     resources:
         runtime=120,
@@ -66,8 +67,7 @@ rule plot_alignment:
         {PX} python {input.script} \
         --feature_table {input.feature_table} \
         --affine {input.affine} \
-        --xenium_cells {input.xenium_cells} \
-        --xenium_experiment {input.xenium_experiment} \
+        --xenium_dir {params.xenium_dir} \
         --max_dist {params.max_dist} \
         --sample_id {wildcards.sample_id} \
         --out_matches {output.matches} \

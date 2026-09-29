@@ -3,8 +3,8 @@
 The input is the nuclear + membrane channel image written by prepare_image. SPACEc combines the
 membrane channels (max projection), segments nuclei and whole cells separately (tiled for large
 images) and derives the cytoplasm mask. Mesmer is run at the image's real pixel size (image_mpp).
-Only the three label masks are kept; per-cell features are computed by quantify_cells on all
-channels. SPACEc's own feature tables are written to a temporary folder and discarded.
+Only the three label masks are kept, all labelled with the cell id (the nucleus and cytoplasm of a
+cell carry that cell's label); per-cell features are computed by quantify_cells on all channels. SPACEc's own feature tables are written to a temporary folder and discarded.
 """
 
 import argparse
@@ -87,10 +87,21 @@ def main():
     if result is None or any(result.get(k) is None for k in masks):
         sys.exit("Mesmer segmentation failed, see the SPACEc messages above")
 
+    # SPACEc labels nuclei (separate Mesmer run) and cytoplasm (connected components) independently
+    # of the cells: relabel both with the id of the cell they lie in, so all three masks share
+    # cell_id. Nuclear pixels outside any cell are dropped.
+    cells = result["masks"].astype(np.int32)
+    in_nucleus = result["masks_nuclei"] > 0
+    shared = {
+        args.out_cells: cells,
+        args.out_nuclei: np.where(in_nucleus, cells, 0),
+        args.out_cytoplasm: np.where(in_nucleus, 0, cells),
+    }
+
     # save the label masks
-    for key, path in masks.items():
-        np.save(path, result[key].astype(np.int32))
-        print(f"written: {path} ({int(result[key].max())} labels)")
+    for path, mask in shared.items():
+        np.save(path, mask)
+        print(f"written: {path} ({len(np.unique(mask)) - 1} labels)")
 
 
 if __name__ == "__main__":

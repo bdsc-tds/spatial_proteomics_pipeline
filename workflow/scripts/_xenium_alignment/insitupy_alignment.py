@@ -1,5 +1,6 @@
 """Register the proteomics DAPI image onto the Xenium nuclei (DAPI) image with insitupy.
 
+The Xenium DAPI (morphology focus channel 0) is read with read_xenium_sample, as in analysis_repo.
 Uses insitupy's ImageRegistration directly: SIFT features are matched on downscaled copies of both
 images and the affine matrix is fitted on the full-resolution feature coordinates. Only that matrix
 is saved (3x3, maps proteomics image pixels (x, y) to Xenium morphology image pixels), together with
@@ -23,6 +24,7 @@ import numpy as np
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from readwrite import MultiplexImage
+from xenium_readwrite import read_xenium_sample, read_xenium_specs
 
 
 def parse_args():
@@ -47,14 +49,21 @@ def flip_matrix(flip_axis, shape):
 
 def main():
     args = parse_args()
-    from insitupy.io import read_xenium
     from insitupy.tools.registration import ImageRegistration
+    from spatialdata import get_pyramid_levels
+    from xarray import DataTree
 
-    # Xenium nuclei image (highest pyramid level) and its pixel size
-    xd = read_xenium(args.xenium_dir)
-    template = xd.images["nuclei"][0]
-    xenium_pixel_size = xd.images.metadata["nuclei"]["pixel_size"]
-    print(f"Xenium nuclei image: {template.shape}, {xenium_pixel_size} µm/px")
+    # Xenium DAPI: channel 0 of the morphology focus image, full resolution
+    sdata = read_xenium_sample(args.xenium_dir, morphology_focus=True)
+    focus = sdata.images["morphology_focus"]
+    if isinstance(focus, DataTree):
+        focus = get_pyramid_levels(focus, n=0)
+    xenium_dapi = focus.isel(c=0)
+    template = xenium_dapi.values
+
+    # Xenium pixel size from experiment.xenium
+    xenium_pixel_size = read_xenium_specs(os.path.join(args.xenium_dir, "experiment.xenium"))["pixel_size"]
+    print(f"Xenium {xenium_dapi.c.item()} image: {template.shape}, {xenium_pixel_size} µm/px")
 
     # proteomics DAPI plane
     with MultiplexImage(args.dapi) as img:

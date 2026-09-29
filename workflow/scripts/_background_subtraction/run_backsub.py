@@ -1,5 +1,8 @@
+# not named backsub.py: the script's folder comes first on sys.path, so that name would shadow the
+# backsub package imported below
 import os
 import argparse
+import subprocess
 from backsub import metadata2markers
 from pathlib import Path
 
@@ -64,7 +67,15 @@ def main(img_path: str, output_dir: str):
         remove_dapi=True,
         keep_registration_markername="DAPI",
     )
-    os.system(f"backsub -r '{img_path}' -o '{output_dir}/image.ome.tiff' -m {output_dir}/markers.csv -mo {output_dir}/markerout.csv")
+    # run the backsub CLI; check=True so that a failed subtraction fails the rule
+    subprocess.run(
+        ["backsub",
+         "-r", img_path,
+         "-o", os.path.join(output_dir, "image.ome.tiff"),
+         "-m", os.path.join(output_dir, "markers.csv"),
+         "-mo", os.path.join(output_dir, "markerout.csv")],
+        check=True,
+    )
 
 
 if __name__ == "__main__":

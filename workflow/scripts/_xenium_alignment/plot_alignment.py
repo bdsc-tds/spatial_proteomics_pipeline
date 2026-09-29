@@ -9,7 +9,6 @@ matched as mutual nearest neighbours within --max_dist µm. Writes:
 """
 
 import argparse
-import json
 import os
 import sys
 
@@ -24,14 +23,14 @@ from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggpl
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from utils import apply_affine, mutual_nearest_neighbours
+from xenium_readwrite import read_xenium_sample, read_xenium_specs
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feature_table", required=True, help="quantify_cells output (cell_id, x_px, y_px, ...)")
     parser.add_argument("--affine", required=True, help="3x3 matrix, proteomics px -> Xenium px")
-    parser.add_argument("--xenium_cells", required=True, help="Xenium cells.parquet (centroids in µm)")
-    parser.add_argument("--xenium_experiment", required=True, help="Xenium experiment.xenium (pixel_size)")
+    parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (cells table, experiment.xenium)")
     parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
     parser.add_argument("--sample_id", default="", help="used in the plot titles")
     parser.add_argument("--out_matches", required=True)
@@ -44,15 +43,14 @@ def main():
     args = parse_args()
 
     # proteomics centroids in Xenium µm
-    with open(args.xenium_experiment) as f:
-        xenium_pixel_size = json.load(f)["pixel_size"]
+    xenium_pixel_size = read_xenium_specs(os.path.join(args.xenium_dir, "experiment.xenium"))["pixel_size"]
     cells = pd.read_csv(args.feature_table, usecols=["cell_id", "x_px", "y_px"])
     matrix = np.loadtxt(args.affine, delimiter=",")
     aligned_um = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix) * xenium_pixel_size
     print(f"{len(cells)} proteomics cells, Xenium pixel size {xenium_pixel_size} µm/px")
 
-    # Xenium centroids (µm)
-    xenium = pd.read_parquet(args.xenium_cells, columns=["cell_id", "x_centroid", "y_centroid"])
+    # Xenium centroids (µm), from the cells table read as in analysis_repo
+    xenium = read_xenium_sample(args.xenium_dir, anndata=True).obs[["cell_id", "x_centroid", "y_centroid"]]
     xenium_um = xenium[["x_centroid", "y_centroid"]].to_numpy()
     print(f"{len(xenium)} Xenium cells")
 
