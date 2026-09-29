@@ -17,6 +17,7 @@ rule segmentation_mesmer:
     params:
         nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
+        model_dir=config["segmentation"]["mesmer_model_dir"],
     threads: 4
     resources:
         # Mesmer holds the nuclear and combined membrane planes plus its outputs in memory
@@ -34,6 +35,7 @@ rule segmentation_mesmer:
         --image {input.image} \
         --nuclear_channel {params.nuclear_channel} \
         --membrane_channels {params.membrane_channels} \
+        --model_dir {params.model_dir} \
         --out_cells {output.cells} \
         --out_nuclei {output.nuclei} \
         --out_cytoplasm {output.cytoplasm} \

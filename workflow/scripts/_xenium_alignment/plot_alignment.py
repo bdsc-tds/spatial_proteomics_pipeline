@@ -1,126 +1,111 @@
+"""Bring the proteomics cells into Xenium coordinates, match them to Xenium cells and plot the result.
+
+The proteomics centroids (pixels of the proteomics image) are mapped with the alignment matrix to
+Xenium morphology pixels, then to µm with the Xenium pixel size from experiment.xenium. Cells are
+matched as mutual nearest neighbours within --max_dist µm. Writes:
+  - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
+  - an overlay of Xenium and aligned proteomics centroids
+  - a bar plot of the number of Xenium, proteomics, matched and unmatched proteomics cells
+"""
+
 import argparse
-import matplotlib.pyplot as plt
-from plotnine import *
+import json
 import os
-import scanpy as sc
+import sys
 
-from utils import *
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggplot, scale_fill_manual,
+                      scale_y_continuous, theme, theme_classic, xlab, ylab)
 
-def plot_aligned_samples(main_dir, xenium_file, data_type, hid, rid, segmentation_method, align_method):
-    raw_folder = os.path.join(main_dir, "raw", data_type, "cropped", hid, rid)
-    processed_folder = os.path.join(main_dir, "processed", data_type, hid, rid)
-    matrix = os.path.join(processed_folder, 'image_alignment', align_method, 'affine_matrix.csv')
-    if os.path.exists(os.path.join(os.path.dirname(matrix), "error.txt")):
-        print("Affine matrix does not exists")
-        exit(0)
-    
-    print(f"Processing {data_type} with method {segmentation_method}...")
-    csv_file = os.path.join(processed_folder, "segmentation", segmentation_method, "feature_table.csv")
-    adata_comet = spatial_to_adata(csv_file, hid, rid, segmentation_method)
-    xmin, ymin, xmax, ymax = get_coords(os.path.join(raw_folder, "image_cropped.geojson"))
-    print(f"Cropping adata_comet to coordinates: xmin={xmin}, ymin={ymin}, xmax={xmax}, ymax={ymax}...")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(script_dir, "../utils/"))
+from utils import apply_affine, mutual_nearest_neighbours
 
-    if segmentation_method == "horizon":
-        # the cropping coordinates are in microns, so we need to convert them to pixels by multiplying by 0.28 (the mpp of the comet images)
-        xmin *= 0.28
-        xmax *= 0.28
-        ymin *= 0.28
-        ymax *= 0.28
-    
-    adata_subs = adata_comet[((adata_comet.obs["y_centroid"] <= ymax) &
-                                (adata_comet.obs["y_centroid"] >= ymin) &
-                                (adata_comet.obs["x_centroid"] <= xmax) &
-                                (adata_comet.obs["x_centroid"] >= xmin)),:].copy()
-    
-    if segmentation_method == "mesmer":
-        adata_subs.obs["x_centroid"] *= 0.28
-        adata_subs.obs["y_centroid"] *= 0.28
-        adata_subs.obs["area"] *= 0.28 ** 2
-    
-    print(adata_subs)
-    print(f"Applying affine transformation for {align_method}...")
-    print(f"Using affine matrix from: {matrix}")
-    
-    mapped_adata = transf_centroids(
-        adata_subs,
-        cell_id_col="cell_id",
-        aff_mtx=matrix,
-        crop_gpd=os.path.join(raw_folder, "image_cropped.geojson"),
-        mpp_input=0.28,
-        mpp_aligned=0.2125,
-        centroids_microns=True,
-        x_col="x_centroid",
-        y_col="y_centroid",
-        add_to_obs=True,
-    )
 
-    xenium_adata = sc.read_h5ad(xenium_file)
-    print(xenium_adata)
-    
-    plt.figure(figsize=(8, 8))
-    plt.scatter(xenium_adata.obs["centroid_x"], xenium_adata.obs["centroid_y"], s=0.5, alpha=0.4, label=f"xenium sample")
-    plt.scatter(mapped_adata.obs["x_centroid_aligned"], mapped_adata.obs["y_centroid_aligned"], s=0.5, alpha=0.4, label=f"{data_type} - {segmentation_method} - {align_method}")
-    plt.title(f"Aligned Centroids for {hid} : {data_type} with method {segmentation_method} and alignment {align_method}")
-    plt.xlabel("X Centroid Aligned")
-    plt.ylabel("Y Centroid Aligned")
-    plt.legend()
-    plt.gca().set_aspect("equal")
-    
-    out_path = f"{processed_folder}/image_alignment/{align_method}/plots"
-    os.makedirs(out_path, exist_ok=True)
-    plt.savefig(f"{out_path}/{segmentation_method}_aligned_samples.png")
-    
-    mapped_adata, xenium_adata = map_metadata(mapped_adata, xenium_adata, ct_cols=[], max_dist=5)
-    mapped = mapped_adata.obs["matched"].sum()
-    unmapped = mapped_adata.n_obs-mapped
-    # put in a dataframe ncells for aligment
-    df_align = pd.DataFrame({"ncells": [xenium_adata.n_obs, mapped_adata.n_obs,
-                                        mapped, unmapped],
-                            "modality": ["Xenium", "comet", "mapped", "unmapped"]})
-    df_align["modality"] = pd.Categorical(df_align["modality"], categories=["Xenium", "comet", "mapped", "unmapped"], ordered=True)
-    print(f"{hid}|{rid}|{data_type}|{segmentation_method}|{align_method}")
-    print(df_align)
-
-    cols_mapped = {
-        'Xenium': '#19618A', 
-        'comet': '#09B39C', # (Your existing teal/green)
-        'mapped': '#FFB300',     # Bright Amber/Yellow
-        'unmapped': '#D32F2F'   # Strong, Clear Red
-    }
-    
-    # make barplot
-    bar = (ggplot(df_align, aes(x="modality", y="ncells", fill="modality")) +
-        geom_bar(stat="identity") +
-        geom_text(aes(label="ncells"), va="bottom", nudge_y=50, size=10, format_string="{:,}") +
-        theme_classic() +
-        theme(panel_border=element_rect(color="black", fill=None),
-                legend_text=element_text(size=15),
-                legend_title=element_text(size=16),
-                axis_text_x=element_text(size=14, color="black", angle=45, hjust=1, vjust=1),
-                axis_text_y=element_text(size=12, color="black"),
-                axis_title_y = element_text(size = 15),
-                figure_size = (6,5)) +
-            ylab("Number of cells") +
-            xlab("") +
-            scale_y_continuous(expand = [0,0,0.08,0]) +
-            scale_fill_manual(values=cols_mapped)
-            )
-    
-    bar.save(f"{out_path}/{segmentation_method}_bar_plot.png", dpi=300, height=5, width=6)
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--feature_table", required=True, help="quantify_cells output (cell_id, x_px, y_px, ...)")
+    parser.add_argument("--affine", required=True, help="3x3 matrix, proteomics px -> Xenium px")
+    parser.add_argument("--xenium_cells", required=True, help="Xenium cells.parquet (centroids in µm)")
+    parser.add_argument("--xenium_experiment", required=True, help="Xenium experiment.xenium (pixel_size)")
+    parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
+    parser.add_argument("--sample_id", default="", help="used in the plot titles")
+    parser.add_argument("--out_matches", required=True)
+    parser.add_argument("--out_overlay", required=True)
+    parser.add_argument("--out_counts", required=True)
+    return parser.parse_args()
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("main_dir", help="Main directory")
-    parser.add_argument("xenium_file", help="Xenium file")
-    parser.add_argument("data_type", help="Data type")
-    parser.add_argument("hid", help="HID")
-    parser.add_argument("rid", help="RID")
-    parser.add_argument("segment", help="Segmentation method")
-    parser.add_argument("align", help="Alignment method")
-    args = parser.parse_args()
+    args = parse_args()
 
-    plot_aligned_samples(args.main_dir, args.xenium_file, args.data_type, args.hid, args.rid, args.segment, args.align)
+    # proteomics centroids in Xenium µm
+    with open(args.xenium_experiment) as f:
+        xenium_pixel_size = json.load(f)["pixel_size"]
+    cells = pd.read_csv(args.feature_table, usecols=["cell_id", "x_px", "y_px"])
+    matrix = np.loadtxt(args.affine, delimiter=",")
+    aligned_um = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix) * xenium_pixel_size
+    print(f"{len(cells)} proteomics cells, Xenium pixel size {xenium_pixel_size} µm/px")
+
+    # Xenium centroids (µm)
+    xenium = pd.read_parquet(args.xenium_cells, columns=["cell_id", "x_centroid", "y_centroid"])
+    xenium_um = xenium[["x_centroid", "y_centroid"]].to_numpy()
+    print(f"{len(xenium)} Xenium cells")
+
+    # mutual nearest neighbours within max_dist
+    pairs = mutual_nearest_neighbours(aligned_um, xenium_um, args.max_dist)
+    matches = pd.DataFrame({
+        "proteomics_cell_id": cells["cell_id"].to_numpy()[pairs["index_a"]],
+        "xenium_cell_id": xenium["cell_id"].to_numpy()[pairs["index_b"]],
+        "dist_um": pairs["dist"].to_numpy(),
+    })
+    matches.to_csv(args.out_matches, index=False)
+    print(f"{len(matches)} matched cells within {args.max_dist} µm")
+
+    # overlay of the centroids (many points: matplotlib)
+    plt.figure(figsize=(8, 8))
+    plt.scatter(xenium_um[:, 0], xenium_um[:, 1], s=0.5, alpha=0.4, label="Xenium", color="#19618A")
+    plt.scatter(aligned_um[:, 0], aligned_um[:, 1], s=0.5, alpha=0.4, label="proteomics (aligned)", color="#09B39C")
+    plt.gca().set_aspect("equal")
+    plt.gca().invert_yaxis()
+    plt.title(f"Aligned centroids {args.sample_id}", fontsize=9)
+    plt.xlabel("x (µm)")
+    plt.ylabel("y (µm)")
+    plt.legend(markerscale=10)
+    plt.savefig(args.out_overlay, dpi=200, bbox_inches="tight")
+    plt.close()
+
+    # counts of Xenium, proteomics, matched and unmatched proteomics cells
+    counts = pd.DataFrame({
+        "modality": ["Xenium", "proteomics", "matched", "unmatched"],
+        "ncells": [len(xenium), len(cells), len(matches), len(cells) - len(matches)],
+    })
+    counts["modality"] = pd.Categorical(counts["modality"], categories=counts["modality"], ordered=True)
+    print(counts.to_string(index=False))
+    colors = {"Xenium": "#19618A", "proteomics": "#09B39C", "matched": "#FFB300", "unmatched": "#D32F2F"}
+    p = (
+        ggplot(counts, aes(x="modality", y="ncells", fill="modality"))
+        + geom_col()
+        + geom_text(aes(label="ncells"), va="bottom", nudge_y=counts["ncells"].max() * 0.01, size=9,
+                    format_string="{:,}")
+        + theme_classic()
+        + theme(panel_border=element_rect(fill=None, color="black"),
+                axis_text_x=element_text(angle=45, hjust=1, color="black"),
+                legend_position="none",
+                figure_size=(4, 4))
+        # headroom above the tallest bar for its label
+        + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, counts["ncells"].max() * 1.1))
+        + scale_fill_manual(values=colors)
+        + xlab("")
+        + ylab("Number of cells")
+    )
+    p.save(args.out_counts, dpi=300, verbose=False)
+    print(f"written: {args.out_matches}, {args.out_overlay}, {args.out_counts}")
+
 
 if __name__ == "__main__":
     main()

@@ -1,97 +1,100 @@
+"""Register the proteomics DAPI image onto the Xenium nuclei (DAPI) image with insitupy.
+
+Uses insitupy's ImageRegistration directly: SIFT features are matched on downscaled copies of both
+images and the affine matrix is fitted on the full-resolution feature coordinates. Only that matrix
+is saved (3x3, maps proteomics image pixels (x, y) to Xenium morphology image pixels), together with
+the feature-matching QC figure; no registered image is written.
+
+If the images only match after flipping the proteomics image, insitupy keeps that flip separate from
+its matrix; here it is folded into the saved matrix so that it applies to the unflipped image.
+If too few features match (samples not from the same section, or too different), the step fails;
+lowering --min_good_matches_per_area allows alignment with fewer matches.
+"""
+
 import argparse
-import glob
-from insitupy.io import read_xenium
-from insitupy.tools import register_images
-import numpy as np
 import os
-import shutil
-from utils import get_channels
+import sys
 
-def remove_excess_files(root_dir):
-    '''
-    Removes the excess files created during the alignment process, and moves
-    the alignment matrix to the root directory.
-        
-    Parameters:
-    - root_dir: str, path to the root directory containing the alignment results.
-    '''
-    print("Removing excess files.")
-    normalized_dir = os.path.join(root_dir, 'normalised_results')
-    # Find and move the alignment matrix CSV to the root directory
-    csv_files = glob.glob(
-        os.path.join(normalized_dir, '**', '*_T.csv'),
-        recursive=True
-    )
-    if len(csv_files) == 0:
-        print("Warning: No alignment matrix CSV found in normalised_results.")
-    else:
-        dest = os.path.join(root_dir, 'affine_matrix.csv')
-        shutil.move(csv_files[0], dest)
-        print(f"Moved alignment matrix: {os.path.basename(csv_files[0])} → {root_dir}")
-        print(f"Alignment matrix saved to affine_matrix.csv")
-    # Remove all subdirectories inside normalised_results
-    shutil.rmtree(normalized_dir)
-    print(f"Removed folder: {normalized_dir}")
-    print("Cleanup complete.")
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
 
-def align_matrix(xd_path, image_path, output_dir, min_good_matches_per_area=5):
-    """
-    Creates the aligned matrix between Xenium and Comet and saves it in the
-    same directory as the comet sample.
-    If the samples aligned are not from the same slice, try to decrease the
-    'min_good_matches_per_area' parameter, to allow the alignment to be done
-    with fewer matches. If 1 is not enough, the samples are likely too
-    different to be aligned, and the alignment should be done manually.
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(script_dir, "../utils/"))
+from readwrite import MultiplexImage
 
-    Parameters:
-    - xd_path: str, path to read the Xenium data, should be a folder
-    - image_path: str, path to import the Comet data, should be the exact file
-    - min_good_matches_per_area: int, minimum matches needed per 5mm² areas, to complete the alignment
-    """
-    xd = read_xenium(xd_path)
-    channel_names = get_channels(image_path)
-    print(f"Channel names extracted from OME-XML: {channel_names}")
 
-    # First channel whatever its name
-    first_channel = channel_names[0]
-    # First channel that is different from the first one
-    second_channel = next(c for c in channel_names if c != first_channel)
-    selected_channels = [first_channel, second_channel]
-    print(selected_channels)
-    
-    # create folder for aligned images
-    normalised_dir = os.path.join(output_dir, 'normalised_results')
-    os.makedirs(normalised_dir, exist_ok=True)
-    try:
-        register_images(data=xd, 
-            image_to_be_registered=image_path,
-            axes_image="CYX",
-            channel_names=selected_channels,
-            channel_name_for_registration=channel_names[0],
-            template_image_name="nuclei",
-            axes_template="YX",
-            output_dir=normalised_dir,
-            save_registered_images=True,
-            min_good_matches_per_area=min_good_matches_per_area
-            )
-        print("Image registration done!")
-        print(f"Output directory: {output_dir}")
-    except Exception as e:
-        print(f"Alignment failed for {image_path}: {e}")
-        remove_excess_files(output_dir)
-        raise
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (holding experiment.xenium)")
+    parser.add_argument("--dapi", required=True, help="proteomics DAPI image (dapi.ome.tif from prepare_image)")
+    parser.add_argument("--out_affine", required=True)
+    parser.add_argument("--out_matches", required=True, help="QC figure of the matched features")
+    parser.add_argument("--min_good_matches_per_area", type=int, default=5, help="minimum good matches per mm² of Xenium image")
+    return parser.parse_args()
+
+
+def flip_matrix(flip_axis, shape):
+    """3x3 matrix of the flip insitupy applied to the (Y, X) image before matching."""
+    height, width = shape
+    if flip_axis == 0:  # vertical flip: y -> height - 1 - y
+        return np.array([[1, 0, 0], [0, -1, height - 1], [0, 0, 1]], dtype=float)
+    if flip_axis == 1:  # horizontal flip: x -> width - 1 - x
+        return np.array([[-1, 0, width - 1], [0, 1, 0], [0, 0, 1]], dtype=float)
+    return np.eye(3)
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Align Comet on Xenium images.")
-    parser.add_argument("xd_path", type=str, help="Path to the Xenium data folder.")
-    parser.add_argument("image_path", type=str, help="Path to the Comet image file; has to be a .tif file.")
-    parser.add_argument("output_dir", type=str, help="Directory to save the aligned matrix.")
-    parser.add_argument("--min_good_matches_per_area", type=int, default=5, help="Minimum matches needed per 5mm² areas for alignment.")
-    
-    args = parser.parse_args()
-    
-    align_matrix(args.xd_path, args.image_path, args.output_dir, args.min_good_matches_per_area)
-    remove_excess_files(args.output_dir)
+    args = parse_args()
+    from insitupy.io import read_xenium
+    from insitupy.tools.registration import ImageRegistration
+
+    # Xenium nuclei image (highest pyramid level) and its pixel size
+    xd = read_xenium(args.xenium_dir)
+    template = xd.images["nuclei"][0]
+    xenium_pixel_size = xd.images.metadata["nuclei"]["pixel_size"]
+    print(f"Xenium nuclei image: {template.shape}, {xenium_pixel_size} µm/px")
+
+    # proteomics DAPI plane
+    with MultiplexImage(args.dapi) as img:
+        dapi = img.read_channel(0)
+    print(f"proteomics DAPI: {dapi.shape}, {img.pixel_size_um} µm/px")
+
+    # minimum number of good matches, scaled with the Xenium image area (as insitupy.register_images)
+    area_mm2 = template.shape[0] * template.shape[1] * xenium_pixel_size**2 / 1000**2
+    min_good_matches = int(args.min_good_matches_per_area * area_mm2)
+    print(f"minimum good matches: {min_good_matches} ({args.min_good_matches_per_area}/mm² x {area_mm2:.1f} mm²)")
+
+    # feature matching and affine fit (full-resolution coordinates)
+    reg = ImageRegistration(
+        image=dapi,
+        template=template,
+        axes_image="YX",
+        axes_template="YX",
+        max_width=4000,
+        convert_to_grayscale=False,
+        perspective_transform=False,
+        min_good_matches=min_good_matches,
+    )
+    reg.load_and_scale_images()
+    reg.extract_features(test_flipping=True)
+    reg.calculate_transformation_matrix()
+
+    # 3x3 matrix for the unflipped proteomics image
+    flip_axis = getattr(reg, "flip_axis", None)
+    matrix = np.vstack([reg.T, [0, 0, 1]]) @ flip_matrix(flip_axis, dapi.shape)
+    if flip_axis is not None:
+        print(f"image matched after a {'vertical' if flip_axis == 0 else 'horizontal'} flip; flip folded into the matrix")
+    print(f"affine matrix (proteomics px -> Xenium px):\n{matrix}")
+    np.savetxt(args.out_affine, matrix, delimiter=",")
+
+    # QC figure of the matched features
+    plt.figure(figsize=(12, 6))
+    plt.imshow(reg.matchedVis)
+    plt.axis("off")
+    plt.savefig(args.out_matches, dpi=200, bbox_inches="tight")
+    print(f"written: {args.out_affine}, {args.out_matches}")
 
 
 if __name__ == "__main__":
