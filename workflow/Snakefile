@@ -1,0 +1,124 @@
+# Spatial proteomics pipeline: image preparation, (background subtraction), segmentation,
+# quantification and optional DAPI alignment to Xenium, for any multiplexed imaging technology.
+#
+# The config comes from the profile (configfile: config/config.yml) or --configfile; samples come
+# from the experiments.yml it points to (tissue/panel/donor/sample). See README.md.
+
+import os
+import re
+import shlex
+import sys
+
+sys.path.insert(0, f"{workflow.basedir}/scripts/utils")
+from experiments import get_samples, load_experiments, resolve_path, unlisted_samples
+
+localrules: all
+
+# --- Check if Apptainer/Singularity deployment is active (if yes point to pixi in /app)---
+IS_CONTAINER = any("apptainer" in s or "singularity" in s for s in sys.argv)
+PX = "pixi run --manifest-path /app/pixi.toml --as-is" if IS_CONTAINER else "pixi run --as-is"
+print(f"Deployment Mode: {'SINGULARITY' if IS_CONTAINER else 'LOCAL PIXI ENV'}", file=sys.stderr)
+# A rule needing a non-default environment appends it to PX, e.g. {PX} -e spacec python ...
+
+# --- config: only from the profile / --configfile, so that datasets never get merged ---
+if not workflow.configfiles:
+    raise WorkflowError("no config: run through run.sh / --profile profiles/slurm, or pass --configfile")
+CONFIG_PATH = os.path.realpath(workflow.configfiles[-1])
+OUT = config["output_path"].rstrip("/")
+
+# --- samples: {tissue/panel/donor/sample: image, Xenium run, panel metadata} ---
+EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
+EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
+SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
+SAMPLE_IDS = list(SAMPLES)
+XENIUM_SAMPLE_IDS = [s for s, v in SAMPLES.items() if v["xenium"]]
+print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
+
+# warn (only) about raw samples not yet listed in experiments.yml
+_unlisted = unlisted_samples(EXPERIMENTS, EXPERIMENTS_PATH)
+if _unlisted:
+    print(f"WARNING: {len(_unlisted)} raw samples are not in experiments.yml, add them with "
+          f"`pixi run update-experiments --config {os.path.relpath(workflow.configfiles[-1])}`:\n  "
+          + "\n  ".join(_unlisted), file=sys.stderr)
+
+SEG_METHODS = config["segmentation"]["methods"]
+ALIGN_METHODS = config["xenium_alignment"]["methods"]
+
+wildcard_constraints:
+    sample_id="|".join(re.escape(s) for s in SAMPLE_IDS),
+    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
+    align_method="|".join(re.escape(m) for m in ALIGN_METHODS),
+
+# --- helpers shared by the rules ---
+def panel_meta(wildcards):
+    return SAMPLES[wildcards.sample_id]["panel_meta"]
+
+
+def use_background_subtraction(sample_id):
+    """Background-subtracted image downstream: switched on in config and supported by the panel."""
+    return config["run"]["background_subtraction"] and SAMPLES[sample_id]["panel_meta"]["background_subtraction"]
+
+
+BACKSUB_IMAGE = OUT + "/background_subtraction/{sample_id}/image.ome.tiff"
+
+
+def source_image(wildcards):
+    """Image every step reads channels from: the raw image, or its background-subtracted version."""
+    if use_background_subtraction(wildcards.sample_id):
+        return BACKSUB_IMAGE.format(sample_id=wildcards.sample_id)
+    return SAMPLES[wildcards.sample_id]["image"]
+
+
+def shell_list(values):
+    """Space-separated, shell-quoted list (channel names can contain spaces or parentheses)."""
+    return " ".join(shlex.quote(str(v)) for v in values)
+
+
+# GPU rules fall back to the CPU partition when config gpu.available is false
+GPU = config.get("gpu", {}).get("available", False)
+GPU_PARTITION = config.get("gpu", {}).get("partition_name", "gpu") if GPU else "cpu"
+GPU_EXTRA = "--gres=gpu:1" if GPU else ""
+
+# --- rules ---
+include: "rules/image_preparation.smk"
+include: "rules/background_subtraction.smk"
+include: "rules/segmentation.smk"
+include: "rules/xenium_alignment.smk"
+
+# function that selects which rules to run based on dictionaries below
+def get_targets(run, run_rules):
+    return [t for k in run if run[k] for t in run_rules[k]]
+
+# the switches themselves are set in config.yml (run:), per dataset
+
+# image preparation rules
+run_image_preparation = {
+    "image_preparation": config["run"]["image_preparation"],
+}
+
+# background subtraction rules (COMET)
+run_background_subtraction = {
+    "background_subtraction": config["run"]["background_subtraction"],
+}
+
+# segmentation rules (masks, feature table, GeoJSON)
+run_segmentation = {
+    "segmentation": config["run"]["segmentation"],
+}
+
+# alignment to Xenium rules (affine matrix, overlay plots)
+run_xenium_alignment = {
+    "xenium_alignment": config["run"]["xenium_alignment"],
+}
+
+targets_image_preparation = get_targets(run_image_preparation, run_rules_image_preparation)
+targets_background_subtraction = get_targets(run_background_subtraction, run_rules_background_subtraction)
+targets_segmentation = get_targets(run_segmentation, run_rules_segmentation)
+targets_xenium_alignment = get_targets(run_xenium_alignment, run_rules_xenium_alignment)
+
+rule all:
+    input:
+        targets_image_preparation,
+        targets_background_subtraction,
+        targets_segmentation,
+        targets_xenium_alignment,

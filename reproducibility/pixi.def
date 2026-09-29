@@ -1,0 +1,59 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%files
+    # Copy your manifest files to /app
+    pixi.toml /app/pixi.toml
+    pixi.lock /app/pixi.lock
+
+%post
+    # 1. Install system basics
+    apt-get update && apt-get install -y curl git build-essential locales
+
+    # Set locales to avoid python encoding issues
+    locale-gen en_US.UTF-8
+
+    # 2. Install Pixi globally
+    export PIXI_HOME=/opt/pixi
+    curl -fsSL https://pixi.sh/install.sh | bash
+    # Move pixi bin to a global location so it's always found
+    ln -s /opt/pixi/bin/pixi /usr/local/bin/pixi
+
+    # 3. Install all three environments into one image (default, spacec, snakemake)
+    cd /app
+    pixi config set --local run-post-link-scripts insecure
+    pixi install --locked -e default -e spacec -e snakemake
+
+    # 4. Create the 'px' shorthand for runtime
+    echo '#!/bin/bash' > /usr/local/bin/px
+    echo 'exec pixi run --manifest-path /app/pixi.toml --as-is "$@"' >> /usr/local/bin/px
+    chmod +x /usr/local/bin/px
+
+    # Clean up apt
+    rm -rf /var/lib/apt/lists/*
+
+    # Drop the build-time download caches: pixi keeps the fetched .conda archives and uv keeps the
+    # downloaded wheels, neither of which is needed once the envs are materialised, and both get
+    # baked into the read-only squashfs otherwise
+    pixi clean cache --yes || true
+    rm -rf /root/.cache/rattler /root/.cache/uv /root/.cache/pip
+
+
+%environment
+    export PIXI_PROJECT_MANIFEST="/app/pixi.toml"
+    export PIXI_FROZEN=true
+
+    # INTEL MKL REPRODUCIBILITY
+    export MKL_CBWR="AUTO"
+
+    # NUMBA ARCHITECTURE (Required)
+    export NUMBA_CPU_NAME="generic"
+
+    # PYTHON & GPU (Required)
+    export PYTHONHASHSEED="0"
+    export CUBLAS_WORKSPACE_CONFIG=":4096:8"
+
+%runscript
+    # Default behavior: pass commands through
+    # This allows you to run: apptainer run image.sif pixi run -e my_env python script.py
+    exec "$@"

@@ -1,6 +1,12 @@
 **/data
 **/.snakemake
 **/log_files
+
+# pixi environments (pixi.lock is tracked, it is baked into the container)
+.pixi/
+
+# personal Claude Code settings
+.claude/settings.local.json
 **/misc
 
 # Ignore data files

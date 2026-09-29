@@ -7,62 +7,44 @@ executor: cluster-generic
 cluster-generic-submit-cmd:
   sbatch
     --partition={resources.partition}
-    --account={resources.account}
     --qos={resources.qos}
     --cpus-per-task={threads}
     --job-name=smk-{rule}
     --parsable
-    --output=log_files/stdout_sk_submission.out
-    --error=log_files/stderr_sk_submission.err
+    --output=log_files/smk_submission/smk.out
+    --error=log_files/smk_submission/smk.err
     --mem={resources.mem_mb}
     --time={resources.runtime}
     {resources.slurm_extra}
 
 
 # this enables to cancel all jobs submitted by the pipeline when you cancel scancel the bash script running Snakemake
-# important to specify the conda prefix to the work directory (otherwise the env is installed in the /path/to/home folder...)
 jobs: 500
-retries: 3
+retries: 0
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
 printshellcmds: True
 cluster-generic-cancel-cmd: scancel
 cluster-generic-cancel-nargs: 1000
 keep-going: true
-rerun-triggers: mtime 
+rerun-triggers: [mtime, params, code]
 rerun-incomplete: true
-# sdm: apptainer 
-# sdm: conda
-# #apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data,/path/to/home,/tmp/user:/tmp" # needs to be specified the 1st time to create conda envs
-# apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data,/path/to/home"
-conda-prefix: '/path/to/data'
+sdm: apptainer
+apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data --bind /path/to/scratch"
+# the active dataset config (symlink to config/configs_*/config.yml); override with --configfile
+configfile: config/config.yml
 logger: snkmt
-logger-snkmt-db: /path/to/home
+# run.sh overrides this with {output_path}/snkmt.db of the active config
+logger-snkmt-db: log_files/snkmt.db
 latency-wait: 120
 use-singularity: true
-use-conda: true
+
 
 default-resources:
   partition: cpu
   account: <account>
   qos: cpu-normal
   threads: 1
-  cores: 1
   mem_mb: 5120
-  runtime: 1440
-  slurm_extra: ""
-
-set-resources:
-  align_image:
-    partition: gpu
-    cores: 4
-    runtime: 2880
-    qos: gpu-normal
-    slurm_extra: "--gres=gpu:1"
-  segmentation_mesmer:
-    mem_mb: 128000
-    partition: gpu
-    cores: 4
-    runtime: 2880
-    qos: gpu-normal
-    slurm_extra: "--gres=gpu:1"
+  runtime: 240
+  slurm_extra: "" # needed for GPU jobs

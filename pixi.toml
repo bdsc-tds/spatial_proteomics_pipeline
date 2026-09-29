@@ -1,0 +1,94 @@
+[workspace]
+authors = ["user"]
+channels = ["conda-forge", "bioconda"]
+name = "spatial_proteomics_pipeline"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+# three environments only:
+#   default   - everything except Mesmer (image preparation, backsub, quantification, insitupy
+#               alignment, plots, experiments.yml tooling)
+#   spacec    - Mesmer segmentation (deepcell / tensorflow 2.8 need python <3.11 and numpy <2)
+#   snakemake - the pipeline driver, kept small; runs outside the container (see run.sh)
+[environments]
+default = {features=["default"]}
+spacec = {features=["spacec"], no-default-feature=true}
+snakemake = {features=["snakemake"], no-default-feature=true}
+
+[tasks]
+# create/update experiments.yml from the raw data directory, e.g.
+#   pixi run update-experiments --config config/configs_codex/config.yml --dry-run
+update-experiments = "python workflow/scripts/utils/update_experiments.py"
+
+# default environment: former insitupy + backsub + squid_lazy_expl conda envs. Starting pins follow
+# the working insitupy env (python 3.13); backsub needs zarr >=3, insitupy numpy >=2.1.3 and
+# pyarrow <=21. The pipeline scripts use neither spatialdata nor squidpy, so the zarr-2 pin that
+# squid_lazy_expl carried is gone
+[dependencies]
+python = "3.13.*"
+numpy = ">=2.1.3,<3"
+pandas = ">=2.3,<3"
+scipy = ">=1.16"
+tifffile = ">=2025.10"
+imagecodecs = ">=2025.3"
+zarr = ">=3.1,<4"
+dask = ">=2025.3"
+dask-image = ">=2024.5"
+ome-types = ">=0.6"
+loguru = "*"
+psutil = "*"
+scikit-image = ">=0.25,<1"
+scikit-learn = ">=1.7"
+geopandas = ">=1.1"
+shapely = ">=2.1"
+anndata = ">=0.11"
+scanpy = ">=1.11,<2"
+matplotlib = ">=3.10"
+seaborn = ">=0.13"
+plotnine = ">=0.15"
+affine = ">=2.4"
+pyarrow = ">=14,<=21"
+pyyaml = "*"
+"ruamel.yaml" = "*"
+
+[pypi-dependencies]
+insitupy-spatial = "==0.11.0b3"
+backsub = "==0.5.1"
+# insitupy's image registration was validated with opencv 4.13; opencv 5 is untested
+opencv-python = ">=4.8,<5"
+
+# SPACEc pins python <3.11, matplotlib==3.9, cellpose==3.0.11 and torch<2.6, and deepcell pulls
+# tensorflow 2.8, so it cannot share the default environment (copied from analysis_repo)
+[feature.spacec]
+platforms = ["linux-64"]
+
+[feature.spacec.dependencies]
+python = "3.10.*"
+# SPACEc's own pins (cellpose 3.0.11, matplotlib 3.9, deepcell) are numpy 1.x only, so the conda
+# side has to be held below 2 as well or the two solvers disagree
+numpy = ">=1.26,<2.0"
+# tifffile >=2025.5.10 rewrote its zarr store for zarr 3 and raises on zarr 2
+tifffile = "<2025.5.10"
+zarr = "<3"
+pandas = "*"
+tqdm = "*"
+
+[feature.spacec.pypi-dependencies]
+spacec = ">=0.1.2, <0.2"
+
+[feature.snakemake]
+platforms = ["linux-64"]
+
+[feature.snakemake.dependencies]
+snakemake = "==9.20.0"
+snakemake-executor-plugin-slurm = "*"
+snakemake-executor-plugin-slurm-jobstep = "*"
+snakemake-executor-plugin-cluster-generic = "*"
+snakemake-interface-common = "*"
+snakemake-interface-executor-plugins = "*"
+snakemake-interface-report-plugins = "*"
+snakemake-interface-storage-plugins = "*"
+snakemake-logger-plugin-snkmt = "*"
+
+[feature.snakemake.pypi-dependencies]
+snkmt = "*"
