@@ -17,9 +17,9 @@ rule segmentation_mesmer:
         script=f"{workflow.basedir}/scripts/_segmentation/mesmer.py",
         image=rules.prepare_image.output.segmentation_input,
     output:
-        cells=mesmer_dir + "cell_boundaries_mask.npy",
-        nuclei=mesmer_dir + "nuclei_boundaries_mask.npy",
-        cytoplasm=mesmer_dir + "cytoplasm_boundaries_mask.npy",
+        cells=temp(mesmer_dir + "cell_boundaries_mask.npy"),
+        nuclei=temp(mesmer_dir + "nuclei_boundaries_mask.npy"),
+        cytoplasm=temp(mesmer_dir + "cytoplasm_boundaries_mask.npy"),
     params:
         nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
