@@ -22,6 +22,7 @@ from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggpl
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
+from plotting import savefig, savefig_plotnine, set_mpl_rcparams
 from utils import apply_affine, mutual_nearest_neighbours
 from xenium_readwrite import read_xenium_sample, read_xenium_specs
 
@@ -41,6 +42,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    set_mpl_rcparams()
 
     # proteomics centroids in Xenium µm
     xenium_pixel_size = read_xenium_specs(os.path.join(args.xenium_dir, "experiment.xenium"))["pixel_size"]
@@ -66,16 +68,15 @@ def main():
 
     # overlay of the centroids (many points: matplotlib)
     plt.figure(figsize=(8, 8))
-    plt.scatter(xenium_um[:, 0], xenium_um[:, 1], s=0.5, alpha=0.4, label="Xenium", color="#19618A")
-    plt.scatter(aligned_um[:, 0], aligned_um[:, 1], s=0.5, alpha=0.4, label="proteomics (aligned)", color="#09B39C")
+    plt.scatter(xenium_um[:, 0], xenium_um[:, 1], s=0.05, alpha=0.4, linewidths=0, label="Xenium", color="#19618A")
+    plt.scatter(aligned_um[:, 0], aligned_um[:, 1], s=0.05, alpha=0.4, linewidths=0, label="proteomics (aligned)", color="#09B39C")
     plt.gca().set_aspect("equal")
     plt.gca().invert_yaxis()
     plt.title(f"Aligned centroids {args.sample_id}", fontsize=9)
     plt.xlabel("x (µm)")
     plt.ylabel("y (µm)")
-    plt.legend(markerscale=10)
-    plt.savefig(args.out_overlay, dpi=200, bbox_inches="tight")
-    plt.close()
+    plt.legend(markerscale=30)
+    savefig(None, args.out_overlay, dpi=200)
 
     # counts of Xenium, proteomics, matched and unmatched proteomics cells
     counts = pd.DataFrame({
@@ -92,6 +93,7 @@ def main():
                     format_string="{:,}")
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
+                text=element_text(font="Helvetica"),
                 axis_text_x=element_text(angle=45, hjust=1, color="black"),
                 legend_position="none",
                 figure_size=(4, 4))
@@ -101,7 +103,7 @@ def main():
         + xlab("")
         + ylab("Number of cells")
     )
-    p.save(args.out_counts, dpi=300, verbose=False)
+    savefig_plotnine(p, counts, args.out_counts)
     print(f"written: {args.out_matches}, {args.out_overlay}, {args.out_counts}")
 
 

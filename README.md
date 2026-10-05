@@ -28,7 +28,7 @@ processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
   segmentation/mesmer/{sample_id}/                  *_boundaries_mask.npy, feature_table.csv, *_boundaries.geojson, logs/
-  xenium_alignment/insitupy/{sample_id}/            affine_matrix.csv, mesmer_cell_matches.csv, figures/, logs/
+  xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, mesmer_cell_matches.csv, figures/, logs/
   snkmt.db                                          run monitoring database
 ```
 
@@ -98,10 +98,15 @@ pixi run update-experiments --config config/configs_codex/config.yml            
 - previews which Xenium run each sample will be aligned to;
 - reports samples whose image disappeared (removed only with `--prune`).
 
-Each sample's image and Xenium run are not stored: they are found when the pipeline starts. The
-Xenium run is the folder below `_xenium_base_path` (holding `experiment.xenium`) whose name, or the
-sample field of its `output-<instrument>__<slide>__<sample>__…` name, equals the sample name exactly.
-Samples without a match simply get no alignment. The pipeline also warns about raw samples missing
+Each sample's image and Xenium run are not stored: they are found when the pipeline starts. Xenium
+runs are expected as `{_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/` (the
+xenium_analysis_pipeline layout, `sample` being the Xenium output folder). Names are
+compared case-insensitively with `-` and `_` treated alike, and one name "contains" another when it
+holds it as whole `_`-separated tokens. A proteomics sample is matched to the run whose donor contains
+the proteomics donor and whose donor or sample contains the proteomics sample, e.g.
+`donor_01/donor_01` →
+`donor_01/output-XETG00000__slide_01__donor_01__…`. Tissue and panel
+names are ignored. Samples without a match, or with several, get no alignment. The pipeline also warns about raw samples missing
 from experiments.yml.
 
 ## Running
@@ -155,8 +160,8 @@ workflow/
 
 ## Known limitations
 
-- Xenium runs are matched to samples by exact sample name; data with other naming may need an
-  explicit mapping.
+- Xenium runs are matched to samples by donor and sample name (see above); data whose names do not
+  contain each other may need an explicit mapping.
 - The COMET dataset config (`config/configs_comet/`) is not written yet.
 
 ## License

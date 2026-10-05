@@ -23,7 +23,7 @@ rule segmentation_mesmer:
     params:
         nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
-        model_dir=config["segmentation"]["mesmer_model_dir"],
+        model_dir=config["segmentation"]["mesmer"]["model_dir"],
     threads: gpu_threads(gpu=1, cpu=8)
     resources:
         # Mesmer holds the nuclear and combined membrane planes plus its outputs in memory

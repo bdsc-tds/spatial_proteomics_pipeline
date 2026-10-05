@@ -12,7 +12,7 @@ Run before the first pipeline execution, and again whenever new samples arrive:
   must be filled in by hand before the pipeline accepts the panel.
 - Image and Xenium paths are not stored: the pipeline derives them when it reads the sheet. When
   _xenium_base_path is set, this script previews which Xenium run each sample will be matched to
-  (folder name or 10x output-*__<sample>__* label equal to the sample name).
+  (same donor, then same sample name, see experiments.match_xenium_runs).
 - Samples listed in experiments.yml but gone from disk are only reported, unless --prune.
 """
 
@@ -35,6 +35,7 @@ from experiments import (
     index_xenium_runs,
     iter_samples,
     layer_items,
+    match_xenium_runs,
     resolve_path,
     scan_raw_samples,
 )
@@ -47,7 +48,6 @@ def parse_args():
     parser.add_argument("--xenium_base_path", help="raw Xenium directory; only used when experiments.yml has no _xenium_base_path yet")
     parser.add_argument("--image_ext", help=f"image extension for panels not yet in experiments.yml (default: any of {', '.join(DEFAULT_IMAGE_EXTS)})")
     parser.add_argument("--panel_template", help="existing panel whose metadata is copied into new panels")
-    parser.add_argument("--xenium_max_depth", type=int, default=6, help="max folder depth searched below _xenium_base_path")
     parser.add_argument("--prune", action="store_true", help="remove samples whose raw folder no longer holds an image")
     parser.add_argument("--dry-run", action="store_true", help="print the resulting changes without writing")
     return parser.parse_args()
@@ -155,15 +155,15 @@ def main():
             if not donor_list:
                 del experiments[tissue][panel][donor]
 
-    # preview the Xenium runs the pipeline will match on the exact sample name (nothing is stored)
+    # preview the Xenium runs the pipeline will match on donor and sample name (nothing is stored)
     xenium_filled, xenium_ambiguous, xenium_unmatched = [], {}, []
     xenium_base_path = resolve_path(experiments.get("_xenium_base_path"), experiments_path)
     if xenium_base_path:
         if not os.path.isdir(xenium_base_path):
             sys.exit(f"Xenium directory not found: {xenium_base_path!r}")
-        runs = index_xenium_runs(xenium_base_path, args.xenium_max_depth)
+        runs = index_xenium_runs(xenium_base_path)
         for tissue, panel, donor, sample, _ in iter_samples(experiments):
-            matches = sorted(set(runs.get(sample, [])))
+            matches = match_xenium_runs(donor, sample, runs)
             if len(matches) == 1:
                 xenium_filled.append(((tissue, panel, donor, sample), matches[0]))
             elif matches:
@@ -191,7 +191,7 @@ def main():
         for k, matches in xenium_ambiguous.items():
             print(f"  ambiguous, alignment skipped: {fmt(k)}: {', '.join(matches)}")
         for k in xenium_unmatched:
-            print(f"  no Xenium run named {k[3]!r}")
+            print(f"  no Xenium run for donor {k[2]!r}, sample {k[3]!r}")
     incomplete = [f"{t}/{p}" for t, tissue_node in layer_items(experiments) for p, panel_node in layer_items(tissue_node)
                   if any(panel_node.get(key) is None for key in PANEL_TEMPLATE)]
     if incomplete:

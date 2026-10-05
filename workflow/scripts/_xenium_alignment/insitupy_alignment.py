@@ -23,6 +23,7 @@ import numpy as np
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
+from plotting import savefig, set_mpl_rcparams
 from readwrite import MultiplexImage
 from xenium_readwrite import read_xenium_sample, read_xenium_specs
 
@@ -34,6 +35,8 @@ def parse_args():
     parser.add_argument("--out_affine", required=True)
     parser.add_argument("--out_matches", required=True, help="QC figure of the matched features")
     parser.add_argument("--min_good_matches_per_area", type=int, default=5, help="minimum good matches per mm² of Xenium image")
+    parser.add_argument("--max_width", type=int, default=4000,
+                        help="both images are shrunk to about max_width² px before feature matching")
     return parser.parse_args()
 
 
@@ -49,6 +52,7 @@ def flip_matrix(flip_axis, shape):
 
 def main():
     args = parse_args()
+    set_mpl_rcparams()
     from insitupy.tools.registration import ImageRegistration
     from spatialdata import get_pyramid_levels
     from xarray import DataTree
@@ -76,12 +80,13 @@ def main():
     print(f"minimum good matches: {min_good_matches} ({args.min_good_matches_per_area}/mm² x {area_mm2:.1f} mm²)")
 
     # feature matching and affine fit (full-resolution coordinates)
+    print(f"feature matching on copies shrunk to ~{args.max_width}² px")
     reg = ImageRegistration(
         image=dapi,
         template=template,
         axes_image="YX",
         axes_template="YX",
-        max_width=4000,
+        max_width=args.max_width,
         convert_to_grayscale=False,
         perspective_transform=False,
         min_good_matches=min_good_matches,
@@ -102,7 +107,7 @@ def main():
     plt.figure(figsize=(12, 6))
     plt.imshow(reg.matchedVis)
     plt.axis("off")
-    plt.savefig(args.out_matches, dpi=200, bbox_inches="tight")
+    savefig(None, args.out_matches, dpi=200)
     print(f"written: {args.out_affine}, {args.out_matches}")
 
 

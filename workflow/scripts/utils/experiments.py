@@ -8,8 +8,10 @@ Layout (as in xenium_analysis_pipeline): tissue -> panel -> donor -> [samples]. 
 
 Nothing per sample is stored; both paths are derived when the sheet is read:
   - image:  the single *.{_image_ext} file in {_base_path}/{tissue}/{panel}/{donor}/{sample}/
-  - xenium: the Xenium run (dir holding experiment.xenium) below _xenium_base_path whose folder name,
-            or 10x "output-*__<sample>__*" label, equals the sample name exactly; None if there is none
+  - xenium: the Xenium run {_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/ (layout of
+            xenium_analysis_pipeline) whose donor name contains the proteomics donor and whose
+            donor or sample name contains the proteomics sample; None if there is no such run or
+            several (see match_xenium_runs)
 
 This module only depends on the standard library (plus PyYAML in load_experiments) so that it can be
 imported both by the Snakefile and by update_experiments.py.
@@ -32,21 +34,31 @@ PANEL_TEMPLATE = {
 # extensions tried for panels that are not in experiments.yml yet
 DEFAULT_IMAGE_EXTS = ("qptiff", "ome.tiff", "ome.tif")
 
-# file that marks the root of a Xenium output directory
-XENIUM_MARKER = "experiment.xenium"
-
 
 def is_meta(key):
+    """Whether an experiments.yml key is metadata rather than a layer.
+
+    key: any dict key of the experiments tree.
+    Returns True when the key starts with "_".
+    """
     return str(key).startswith("_")
 
 
 def layer_items(node):
-    """Non-metadata (key, value) pairs of one layer of the experiments tree."""
+    """Child layers of one node of the experiments tree, metadata keys left out.
+
+    node: dict of one layer (whole sheet, tissue or panel), or None.
+    Returns a list of (name, child node) pairs.
+    """
     return [(k, v) for k, v in (node or {}).items() if not is_meta(k)]
 
 
 def donor_samples(donor_node):
-    """Sample names of one donor: a list, or a single name."""
+    """Sample names of one donor.
+
+    donor_node: value under a donor key: a list of names, a single name, or None.
+    Returns a list of sample names (empty for None).
+    """
     if donor_node is None:
         return []
     if isinstance(donor_node, str):
@@ -55,7 +67,12 @@ def donor_samples(donor_node):
 
 
 def iter_samples(experiments):
-    """Yield (tissue, panel, donor, sample, panel_node) for every sample."""
+    """Walk every sample of the sheet.
+
+    experiments: parsed experiments.yml dict.
+    Yields (tissue, panel, donor, sample, panel_node), panel_node being the panel's dict (with its
+    "_" metadata).
+    """
     for tissue, tissue_node in layer_items(experiments):
         for panel, panel_node in layer_items(tissue_node):
             for donor, donor_node in layer_items(panel_node):
@@ -64,13 +81,24 @@ def iter_samples(experiments):
 
 
 def resolve_path(path, experiments_path=None):
-    """Absolute path; relative paths are taken relative to the experiments.yml folder."""
+    """Make a path from experiments.yml absolute.
+
+    path: path as written in the sheet (absolute, relative, or None).
+    experiments_path: path of experiments.yml; relative paths are resolved against its folder.
+    Returns the absolute path, or path unchanged when it is None, already absolute, or
+    experiments_path is None.
+    """
     if path is None or os.path.isabs(path) or experiments_path is None:
         return path
     return os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(experiments_path)), path))
 
 
 def load_experiments(experiments_path):
+    """Read experiments.yml.
+
+    experiments_path: path of experiments.yml.
+    Returns the parsed dict ({} for an empty file).
+    """
     import yaml
 
     with open(experiments_path) as f:
@@ -78,7 +106,12 @@ def load_experiments(experiments_path):
 
 
 def find_images(sample_dir, exts):
-    """Image file names in one sample folder with any of the given extensions."""
+    """Image files of one sample folder.
+
+    sample_dir: sample folder path.
+    exts: accepted extensions without the dot, e.g. ["qptiff"].
+    Returns the sorted file names (not paths) ending in any of exts; [] if the folder is missing.
+    """
     if not os.path.isdir(sample_dir):
         return []
     return sorted(
@@ -88,12 +121,15 @@ def find_images(sample_dir, exts):
     )
 
 
-def get_samples(experiments, experiments_path=None, xenium_max_depth=6):
-    """Validate experiments.yml and flatten it into {sample_id: info}.
+def get_samples(experiments, experiments_path=None):
+    """Validate experiments.yml and flatten it into one entry per sample.
 
-    sample_id is "tissue/panel/donor/sample"; info holds the layer names, the absolute image path,
-    the absolute Xenium run dir (None when the sample has no unique Xenium match) and the panel
-    metadata (without the leading "_").
+    experiments: parsed experiments.yml dict.
+    experiments_path: path of experiments.yml, to resolve relative _base_path/_xenium_base_path.
+    Returns {"tissue/panel/donor/sample": info}, info holding the four layer names, "image" (absolute
+    image path), "xenium" (absolute Xenium run dir, None without a unique match) and "panel_meta"
+    (panel metadata without the leading "_"). Raises ValueError listing every incomplete panel or
+    sample folder without exactly one image; warns about ambiguous Xenium matches.
     """
     base_path = resolve_path(experiments.get("_base_path"), experiments_path)
     xenium_base_path = resolve_path(experiments.get("_xenium_base_path"), experiments_path)
@@ -101,7 +137,7 @@ def get_samples(experiments, experiments_path=None, xenium_max_depth=6):
         raise ValueError("experiments.yml: _base_path is not set")
 
     # index the Xenium runs once
-    xenium_runs = index_xenium_runs(xenium_base_path, xenium_max_depth) if xenium_base_path else {}
+    xenium_runs = index_xenium_runs(xenium_base_path) if xenium_base_path else []
 
     samples, errors, ambiguous = {}, [], []
     for tissue, panel, donor, sample, panel_node in iter_samples(experiments):
@@ -121,8 +157,8 @@ def get_samples(experiments, experiments_path=None, xenium_max_depth=6):
             errors.append(f"sample {sample_id}: expected one *.{panel_meta['image_ext']} in {sample_dir}, found {len(images)}")
             continue
 
-        # Xenium run: exact sample-name match; ambiguous matches are left out
-        matches = sorted(set(xenium_runs.get(sample, [])))
+        # Xenium run: donor, then sample name match; ambiguous matches are left out
+        matches = match_xenium_runs(donor, sample, xenium_runs)
         if len(matches) > 1:
             ambiguous.append(f"{sample_id}: {', '.join(matches)}")
 
@@ -146,7 +182,11 @@ def get_samples(experiments, experiments_path=None, xenium_max_depth=6):
 
 
 def get_panel_exts(experiments):
-    """{panel: image extension} for every panel that already defines _image_ext."""
+    """Image extension of every panel that already defines one.
+
+    experiments: parsed experiments.yml dict.
+    Returns {panel: _image_ext}, across all tissues.
+    """
     exts = {}
     for _, tissue_node in layer_items(experiments):
         for panel, panel_node in layer_items(tissue_node):
@@ -156,8 +196,11 @@ def get_panel_exts(experiments):
 
 
 def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS):
-    """Find sample folders under {base_path}/{tissue}/{panel}/{donor}/{sample}/.
+    """Find the sample folders on disk, {base_path}/{tissue}/{panel}/{donor}/{sample}/.
 
+    base_path: raw proteomics directory (_base_path).
+    panel_exts: {panel: extension} from get_panel_exts; panels not in it use default_exts.
+    default_exts: extensions tried for panels not yet in experiments.yml.
     Returns {(tissue, panel, donor, sample): [image file names]}; the list is empty for sample
     folders that hold no image yet (e.g. CODEX samples that only have their crop geojson).
     """
@@ -174,40 +217,55 @@ def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS
     return found
 
 
-def xenium_run_names(rel_dir):
-    """Names a Xenium run directory can be matched on: each path component, plus the sample label
-    of 10x "output-<instrument>__<slide>__<sample>__<date>__<time>" folder names."""
-    names = set()
-    for part in rel_dir.split(os.sep):
-        names.add(part)
-        fields = part.split("__")
-        if part.startswith("output-") and len(fields) >= 3:
-            names.add(fields[2])
-    return names
+def contains_name(name, query):
+    """Whether one name contains another, compared across modalities.
+
+    name: name searched in, e.g. a Xenium donor or run folder name.
+    query: name searched for, e.g. a proteomics donor or sample name.
+    Returns True when query appears in name as whole "_"-separated tokens, ignoring case and
+    reading "-" as "_": donor_01 is in donor_01 and in
+    output-XETG..__donor_01__.., but not in donor_011.
+    """
+    name, query = (str(s).lower().replace("-", "_") for s in (name, query))
+    return f"_{query}_" in f"_{name}_"
 
 
-def index_xenium_runs(xenium_base_path, max_depth=6):
-    """{name: [Xenium run dirs relative to xenium_base_path]} for every dir holding experiment.xenium."""
-    index = {}
-    for root, dirs, files in os.walk(xenium_base_path):
-        rel = os.path.relpath(root, xenium_base_path)
-        depth = 0 if rel == "." else rel.count(os.sep) + 1
+def index_xenium_runs(xenium_base_path):
+    """List the Xenium runs on disk, {xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/.
 
-        # a Xenium run: record it and do not descend into its (large) output tree
-        if XENIUM_MARKER in files:
-            for name in xenium_run_names(rel):
-                index.setdefault(name, []).append(rel)
-            dirs[:] = []
-            continue
+    xenium_base_path: raw Xenium directory (_xenium_base_path).
+    Returns a sorted list of (tissue, panel, donor, sample) tuples, one per run.
+    """
+    # every directory exactly four levels below the base path is a run, as laid out by xenium_analysis_pipeline
+    run_dirs = glob.glob(os.path.join(xenium_base_path, "*", "*", "*", "*", ""))
+    return sorted(tuple(os.path.relpath(d, xenium_base_path).split(os.sep)) for d in run_dirs)
 
-        # stop descending past max_depth
-        if depth >= max_depth:
-            dirs[:] = []
-    return index
+
+def match_xenium_runs(donor, sample, xenium_runs):
+    """Find the Xenium run(s) of one proteomics sample.
+
+    donor, sample: proteomics donor and sample names.
+    xenium_runs: (tissue, panel, donor, sample) tuples from index_xenium_runs.
+    Returns the sorted run dirs, relative to _xenium_base_path, whose donor name contains donor and
+    whose donor or sample (run folder) name contains sample (contains_name). Tissue and panel are
+    ignored; more than one result means the sample is ambiguous.
+    """
+    # runs of the same donor
+    donor_runs = [run for run in xenium_runs if contains_name(run[2], donor)]
+    # among them, runs of the same sample
+    return sorted(
+        os.path.join(*run) for run in donor_runs if contains_name(run[2], sample) or contains_name(run[3], sample)
+    )
 
 
 def unlisted_samples(experiments, experiments_path=None):
-    """Sample IDs whose raw folder holds exactly one image but that are missing from experiments.yml."""
+    """Samples on disk that experiments.yml does not list yet.
+
+    experiments: parsed experiments.yml dict.
+    experiments_path: path of experiments.yml, to resolve a relative _base_path.
+    Returns "tissue/panel/donor/sample" IDs whose raw folder holds exactly one image but that are
+    missing from the sheet; [] when _base_path is unset or missing.
+    """
     base_path = resolve_path(experiments.get("_base_path"), experiments_path)
     if base_path is None or not os.path.isdir(base_path):
         return []
