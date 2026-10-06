@@ -35,8 +35,9 @@ def parse_args():
     parser.add_argument("--out_affine", required=True)
     parser.add_argument("--out_matches", required=True, help="QC figure of the matched features")
     parser.add_argument("--min_good_matches_per_area", type=int, default=5, help="minimum good matches per mm² of Xenium image")
-    parser.add_argument("--max_width", type=int, default=4000,
-                        help="both images are shrunk to about max_width² px before feature matching")
+    parser.add_argument("--max_width", default="4000",
+                        help="both images are shrunk to about max_width² px before feature matching; "
+                             "'codex': the proteomics image size, so only the Xenium image is shrunk")
     return parser.parse_args()
 
 
@@ -79,19 +80,23 @@ def main():
     min_good_matches = int(args.min_good_matches_per_area * area_mm2)
     print(f"minimum good matches: {min_good_matches} ({args.min_good_matches_per_area}/mm² x {area_mm2:.1f} mm²)")
 
+    # max_width: insitupy scales each image to max_width² px area, so sqrt of the proteomics area keeps it unscaled (to within 1 px)
+    max_width = round(np.sqrt(dapi.shape[0] * dapi.shape[1])) if args.max_width == "codex" else int(args.max_width)
+
     # feature matching and affine fit (full-resolution coordinates)
-    print(f"feature matching on copies shrunk to ~{args.max_width}² px")
+    print(f"feature matching on copies shrunk to ~{max_width}² px")
     reg = ImageRegistration(
         image=dapi,
         template=template,
         axes_image="YX",
         axes_template="YX",
-        max_width=args.max_width,
+        max_width=max_width,
         convert_to_grayscale=False,
         perspective_transform=False,
         min_good_matches=min_good_matches,
     )
     reg.load_and_scale_images()
+    print(f"scaled for matching: proteomics {reg.image_scaled.shape}, Xenium {reg.template_scaled.shape}")
     reg.extract_features(test_flipping=True)
     reg.calculate_transformation_matrix()
 
@@ -103,9 +108,11 @@ def main():
     print(f"affine matrix (proteomics px -> Xenium px):\n{matrix}")
     np.savetxt(args.out_affine, matrix, delimiter=",")
 
-    # QC figure of the matched features
+    # QC figure of the matched features, shrunk to at most 4000 px wide (full size with --max_width codex)
+    vis = reg.matchedVis
+    step = max(1, int(np.ceil(vis.shape[1] / 4000)))
     plt.figure(figsize=(12, 6))
-    plt.imshow(reg.matchedVis)
+    plt.imshow(vis[::step, ::step])
     plt.axis("off")
     savefig(None, args.out_matches, dpi=200)
     print(f"written: {args.out_affine}, {args.out_matches}")

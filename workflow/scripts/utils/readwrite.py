@@ -30,6 +30,7 @@ class MultiplexImage:
         axes = self._level.axes
         if axes not in ("CYX", "YX"):
             raise ValueError(f"{path}: unsupported axes {axes!r}, expected CYX or YX")
+        # single-channel YX images are exposed as CYX with one channel
         self.shape = self._level.shape if axes == "CYX" else (1,) + tuple(self._level.shape)
         self.dtype = self._level.dtype
 
@@ -40,9 +41,11 @@ class MultiplexImage:
         else:
             self.channel_names = [_qptiff_channel_name(p.description) for p in self._level.pages[: self.shape[0]]]
             self.pixel_size_um = None
+        # fall back to the generic TIFF resolution tags (qptiff, or OME without PhysicalSizeX)
         if self.pixel_size_um is None:
             self.pixel_size_um = _tiff_resolution_um(self._level.pages[0])
 
+        # every channel must have a unique name, since channels are selected by name downstream
         if len(self.channel_names) != self.shape[0] or any(n is None for n in self.channel_names):
             raise ValueError(f"{path}: could not read a name for every channel: {self.channel_names}")
         if len(set(self.channel_names)) != len(self.channel_names):
@@ -69,11 +72,13 @@ class MultiplexImage:
     def read_channel(self, channel, maxworkers=None):
         """One full-resolution channel plane (Y, X), by index or name."""
         c = self.channel_index(channel) if isinstance(channel, str) else channel
+        # each channel is one TIFF page, so only that plane is read from disk
         return self._level.pages[c].asarray(maxworkers=maxworkers)
 
 
 def _qptiff_channel_name(description):
     """Marker name of one qptiff page: <Biomarker>, else the filter <Name>."""
+    # the page description is XML; take the first non-empty tag, Biomarker preferred
     for tag in ("Biomarker", "Name"):
         m = re.search(fr"<{tag}>(.*?)</{tag}>", description or "")
         if m and m.group(1).strip():
@@ -82,16 +87,19 @@ def _qptiff_channel_name(description):
 
 
 def _ome_root(ome_xml):
+    # parse the OME-XML string into an element tree
     return ET.fromstring(ome_xml)
 
 
 def _local(tag):
+    # strip the XML namespace: "{http://...}Channel" -> "Channel"
     return tag.rsplit("}", 1)[-1]
 
 
 def _ome_channel_names(ome_xml):
     """Channel names of the first OME image (namespace-agnostic)."""
     image = next(e for e in _ome_root(ome_xml).iter() if _local(e.tag) == "Image")
+    # one <Channel Name=...> element per channel, in channel order
     return [e.get("Name") for e in image.iter() if _local(e.tag) == "Channel"]
 
 
@@ -104,6 +112,7 @@ def _ome_pixel_size_um(ome_xml):
     pixels = next((e for e in _ome_root(ome_xml).iter() if _local(e.tag) == "Pixels"), None)
     if pixels is None or pixels.get("PhysicalSizeX") is None:
         return None
+    # convert to µm (OME's default unit when none is given)
     unit = pixels.get("PhysicalSizeXUnit", "µm")
     return float(pixels.get("PhysicalSizeX")) * _UNIT_TO_UM.get(unit, 1.0)
 
@@ -113,6 +122,7 @@ def _tiff_resolution_um(page):
     res, unit = page.tags.get("XResolution"), page.tags.get("ResolutionUnit")
     if res is None or unit is None:
         return None
+    # XResolution is a rational (numerator, denominator) in pixels per ResolutionUnit
     num, den = res.value
     if not num or not den:
         return None
@@ -135,10 +145,12 @@ def write_ome_tiff(path, planes, shape, dtype, channel_names, pixel_size_um, til
             for y in range(0, plane.shape[0], tile[0]):
                 for x in range(0, plane.shape[1], tile[1]):
                     block = plane[y : y + tile[0], x : x + tile[1]]
+                    # edge tiles are zero-padded to the full tile size
                     if block.shape != tile:
                         block = np.pad(block, ((0, tile[0] - block.shape[0]), (0, tile[1] - block.shape[1])))
                     yield block
 
+    # stream the tiles into a BigTIFF with pixel size both as TIFF resolution (px/cm) and in OME metadata
     with tifffile.TiffWriter(path, bigtiff=True, ome=True) as tif:
         tif.write(
             tiles(),

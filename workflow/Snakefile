@@ -41,16 +41,8 @@ if _unlisted:
           f"`pixi run update-experiments --config {os.path.relpath(workflow.configfiles[-1])}`:\n  "
           + "\n  ".join(_unlisted), file=sys.stderr)
 
-SEG_METHODS = config["segmentation"]["methods"]
-ALIGN_METHODS = config["xenium_alignment"]["methods"]
-# max_width values to align with (one output folder each), to compare registrations
-ALIGN_MAX_WIDTHS = config["xenium_alignment"]["insitupy"]["max_width"]
-
 wildcard_constraints:
     sample_id="|".join(re.escape(s) for s in SAMPLE_IDS),
-    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
-    align_method="|".join(re.escape(m) for m in ALIGN_METHODS),
-    max_width=r"\d+",
 
 # --- helpers shared by the rules ---
 def panel_meta(wildcards):

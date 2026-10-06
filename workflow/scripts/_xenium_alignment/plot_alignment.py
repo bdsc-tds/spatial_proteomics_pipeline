@@ -2,7 +2,9 @@
 
 The proteomics centroids (pixels of the proteomics image) are mapped with the alignment matrix to
 Xenium morphology pixels, then to µm with the Xenium pixel size from experiment.xenium. Cells are
-matched as mutual nearest neighbours within --max_dist µm. Writes:
+matched as mutual nearest neighbours within --max_dist µm. Reading, alignment and matching use the
+helpers shared with analysis_repo (multimodal_readwrite, xenium_readwrite), so the matches are
+the same as those of read_xenium_proteomics_sample there. Writes:
   - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
   - an overlay of Xenium and aligned proteomics centroids
   - a bar plot of the number of Xenium, proteomics, matched and unmatched proteomics cells
@@ -23,8 +25,8 @@ from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggpl
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from plotting import savefig, savefig_plotnine, set_mpl_rcparams
-from utils import apply_affine, mutual_nearest_neighbours
-from xenium_readwrite import read_xenium_sample, read_xenium_specs
+from multimodal_readwrite import apply_affine, mesmer_feature_table_to_adata, xenium_pixel_size
+from xenium_readwrite import match_cells_spatial_mnn, read_xenium_sample
 
 
 def parse_args():
@@ -40,29 +42,53 @@ def parse_args():
     return parser.parse_args()
 
 
+def align_proteomics_cells(feature_table, affine, xenium_dir):
+    """Proteomics cells (feature table metadata) and their centroids in Xenium µm, as in
+    read_xenium_proteomics_sample (analysis_repo). xenium_dir can be a 10x output folder or a
+    Proseg raw_results folder (the pixel size then comes from the matching raw Xenium run)."""
+    # Xenium pixel size from experiment.xenium
+    pixel_size = xenium_pixel_size(xenium_dir)
+    # proteomics centroids: proteomics px -> Xenium px -> Xenium µm
+    cells = mesmer_feature_table_to_adata(feature_table).obs
+    matrix = np.loadtxt(affine, delimiter=",")
+    aligned_um = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix) * pixel_size
+    print(f"{len(cells)} proteomics cells, Xenium pixel size {pixel_size} µm/px")
+    return cells, aligned_um
+
+
+def read_xenium_cells(xenium_dir):
+    """Xenium cells (obs, indexed by cell ID) with centroids in µm, read as in analysis_repo
+    (10x output folder or Proseg raw_results folder)."""
+    xenium = read_xenium_sample(xenium_dir, anndata=True, gex_only=True).obs
+    print(f"{len(xenium)} Xenium cells ({xenium_dir})")
+    return xenium
+
+
+def match_cells(cells, aligned_um, xenium, max_dist):
+    """Mutual nearest neighbours within max_dist µm, as in read_xenium_proteomics_sample."""
+    # aligned proteomics centroids indexed like the proteomics cells
+    prot_xy = pd.DataFrame(aligned_um, index=cells.index, columns=["x_centroid", "y_centroid"])
+    pairs = match_cells_spatial_mnn(xenium, prot_xy, max_dist=max_dist)
+    return pd.DataFrame({
+        "proteomics_cell_id": cells.loc[pairs["xr_cell"], "cell_id"].to_numpy(),
+        "xenium_cell_id": pairs["proseg_cell"].to_numpy(),
+        "dist_um": pairs["dist"].to_numpy(),
+    })
+
+
 def main():
     args = parse_args()
     set_mpl_rcparams()
 
     # proteomics centroids in Xenium µm
-    xenium_pixel_size = read_xenium_specs(os.path.join(args.xenium_dir, "experiment.xenium"))["pixel_size"]
-    cells = pd.read_csv(args.feature_table, usecols=["cell_id", "x_px", "y_px"])
-    matrix = np.loadtxt(args.affine, delimiter=",")
-    aligned_um = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix) * xenium_pixel_size
-    print(f"{len(cells)} proteomics cells, Xenium pixel size {xenium_pixel_size} µm/px")
+    cells, aligned_um = align_proteomics_cells(args.feature_table, args.affine, args.xenium_dir)
 
-    # Xenium centroids (µm), from the cells table read as in analysis_repo
-    xenium = read_xenium_sample(args.xenium_dir, anndata=True).obs[["cell_id", "x_centroid", "y_centroid"]]
+    # Xenium centroids (µm)
+    xenium = read_xenium_cells(args.xenium_dir)
     xenium_um = xenium[["x_centroid", "y_centroid"]].to_numpy()
-    print(f"{len(xenium)} Xenium cells")
 
     # mutual nearest neighbours within max_dist
-    pairs = mutual_nearest_neighbours(aligned_um, xenium_um, args.max_dist)
-    matches = pd.DataFrame({
-        "proteomics_cell_id": cells["cell_id"].to_numpy()[pairs["index_a"]],
-        "xenium_cell_id": xenium["cell_id"].to_numpy()[pairs["index_b"]],
-        "dist_um": pairs["dist"].to_numpy(),
-    })
+    matches = match_cells(cells, aligned_um, xenium, args.max_dist)
     matches.to_csv(args.out_matches, index=False)
     print(f"{len(matches)} matched cells within {args.max_dist} µm")
 

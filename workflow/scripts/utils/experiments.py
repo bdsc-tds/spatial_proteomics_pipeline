@@ -59,6 +59,7 @@ def donor_samples(donor_node):
     donor_node: value under a donor key: a list of names, a single name, or None.
     Returns a list of sample names (empty for None).
     """
+    # normalize the three accepted forms (None, single string, list) into a list
     if donor_node is None:
         return []
     if isinstance(donor_node, str):
@@ -90,6 +91,7 @@ def resolve_path(path, experiments_path=None):
     """
     if path is None or os.path.isabs(path) or experiments_path is None:
         return path
+    # realpath so that a symlinked experiments.yml resolves against its real folder
     return os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(experiments_path)), path))
 
 
@@ -99,6 +101,7 @@ def load_experiments(experiments_path):
     experiments_path: path of experiments.yml.
     Returns the parsed dict ({} for an empty file).
     """
+    # imported here so the rest of the module stays standard-library only
     import yaml
 
     with open(experiments_path) as f:
@@ -114,6 +117,7 @@ def find_images(sample_dir, exts):
     """
     if not os.path.isdir(sample_dir):
         return []
+    # regular files only (no subfolders) whose name ends in one of the extensions
     return sorted(
         f
         for f in os.listdir(sample_dir)
@@ -131,6 +135,7 @@ def get_samples(experiments, experiments_path=None):
     (panel metadata without the leading "_"). Raises ValueError listing every incomplete panel or
     sample folder without exactly one image; warns about ambiguous Xenium matches.
     """
+    # raw data roots; the proteomics one is mandatory, the Xenium one optional
     base_path = resolve_path(experiments.get("_base_path"), experiments_path)
     xenium_base_path = resolve_path(experiments.get("_xenium_base_path"), experiments_path)
     if base_path is None:
@@ -148,6 +153,7 @@ def get_samples(experiments, experiments_path=None):
         if missing:
             errors.append(f"panel {tissue}/{panel}: missing or null {', '.join(missing)}")
             continue
+        # metadata keys without the leading "_", e.g. panel_meta["image_ext"]
         panel_meta = {k.lstrip("_"): v for k, v in panel_node.items() if is_meta(k)}
 
         # image: exactly one file with the panel's extension in the sample folder
@@ -162,6 +168,7 @@ def get_samples(experiments, experiments_path=None):
         if len(matches) > 1:
             ambiguous.append(f"{sample_id}: {', '.join(matches)}")
 
+        # flat per-sample entry with absolute paths
         samples[sample_id] = {
             "tissue": tissue,
             "panel": panel,
@@ -188,6 +195,7 @@ def get_panel_exts(experiments):
     Returns {panel: _image_ext}, across all tissues.
     """
     exts = {}
+    # a panel name used in several tissues keeps the extension of the last one read
     for _, tissue_node in layer_items(experiments):
         for panel, panel_node in layer_items(tissue_node):
             if panel_node and panel_node.get("_image_ext"):
@@ -209,6 +217,7 @@ def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS
     # every directory exactly four levels below base_path is a sample folder
     for sample_dir in sorted(glob.glob(os.path.join(base_path, "*", "*", "*", "*", ""))):
         key = tuple(os.path.relpath(sample_dir, base_path).split(os.sep))
+        # skip folders whose path has a "_"-prefixed level, which would clash with metadata keys
         if any(is_meta(k) for k in key):
             continue
         # images: files with the panel's extension, or any default extension for unknown panels
@@ -226,7 +235,9 @@ def contains_name(name, query):
     reading "-" as "_": donor_01 is in donor_01 and in
     output-XETG..__donor_01__.., but not in donor_011.
     """
+    # normalize case and separators
     name, query = (str(s).lower().replace("-", "_") for s in (name, query))
+    # pad both with "_" so only whole tokens match
     return f"_{query}_" in f"_{name}_"
 
 
@@ -269,6 +280,7 @@ def unlisted_samples(experiments, experiments_path=None):
     base_path = resolve_path(experiments.get("_base_path"), experiments_path)
     if base_path is None or not os.path.isdir(base_path):
         return []
+    # compare the samples in the sheet with the sample folders on disk
     listed = {(t, p, d, s) for t, p, d, s, _ in iter_samples(experiments)}
     scanned = scan_raw_samples(base_path, get_panel_exts(experiments))
     return ["/".join(k) for k, images in scanned.items() if len(images) == 1 and k not in listed]

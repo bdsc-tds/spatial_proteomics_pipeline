@@ -23,16 +23,17 @@ rule align_to_xenium_insitupy:
         xenium_dir=xenium_dir,
         min_good_matches=config["xenium_alignment"]["insitupy"]["min_good_matches_per_area"],
     resources:
-        # proteomics DAPI and Xenium nuclei images in memory, features matched on max_width px copies
-        runtime=360,
-        mem='50G',
+        # proteomics DAPI and Xenium nuclei images in memory, features matched on max_width px copies;
+        # codex: SIFT on the full-size proteomics image (~23k² px) needs far more (OOM at 50G)
+        runtime=lambda wildcards: 720 if wildcards.max_width == 'codex' else 360,
+        mem=lambda wildcards: '200G' if wildcards.max_width == 'codex' else '50G' # adjust for minimal rescaling option
     log:
         insitupy_dir + "logs/align_to_xenium_insitupy.log"
     container:
         config["containers"]["pixi"]
     shell:
         """
-        {PX} python {input.script} \
+        {PX} python -u {input.script} \
         --xenium_dir {params.xenium_dir} \
         --dapi {input.dapi} \
         --out_affine {output.affine} \
@@ -59,8 +60,8 @@ rule plot_alignment:
         xenium_dir=xenium_dir,
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
     resources:
-        runtime=120,
-        mem='32G',
+        runtime=60,
+        mem='16G',
     log:
         xenium_alignment_dir + "logs/{seg_method}_plot_alignment.log"
     container:
@@ -80,7 +81,9 @@ rule plot_alignment:
         """
 
 # fraction of Xenium cells matched to a proteomics cell, per alignment method, over all samples,
-# segmentation methods and max_width values
+# segmentation methods and max_width values. Besides the default Xenium multimodal segmentation (from the
+# plot_alignment counts), the script matches the proteomics cells to the Proseg segmentation of every
+# Xenium run that has one (xenium/processed/segmentation/proseg/..., checked by the script)
 xenium_alignment_summary_dir = OUT + "/xenium_alignment/{align_method}/summary/"
 
 rule plot_alignment_summary:
@@ -90,13 +93,18 @@ rule plot_alignment_summary:
                       sample_id=XENIUM_SAMPLE_IDS, allow_missing=True),
     output:
         table=xenium_alignment_summary_dir + "fraction_matched.csv",
-        barplot=xenium_alignment_summary_dir + "figures/fraction_matched_per_sample.png",
+        barplot_multimodal=xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_multimodal.png",
+        barplot_proseg=xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_proseg.png",
         boxplot=xenium_alignment_summary_dir + "figures/fraction_matched_per_max_width.png",
     params:
         root=OUT + "/xenium_alignment",
+        seg_root=OUT + "/segmentation", # feature tables, for the Proseg matching
+        experiments=EXPERIMENTS_PATH, # Xenium run of each sample, for the Proseg folder
+        max_dist=config["xenium_alignment"]["max_match_dist_um"],
     resources:
-        runtime=30,
-        mem='4G',
+        # Proseg cells of every Xenium run read in turn
+        runtime=240,
+        mem='32G',
     log:
         xenium_alignment_summary_dir + "logs/plot_alignment_summary.log"
     container:
@@ -106,8 +114,12 @@ rule plot_alignment_summary:
         {PX} python {input.script} \
         --counts {input.counts:q} \
         --root {params.root} \
+        --seg_root {params.seg_root} \
+        --experiments {params.experiments} \
+        --max_dist {params.max_dist} \
         --out_table {output.table} \
-        --out_barplot {output.barplot} \
+        --out_barplot_multimodal {output.barplot_multimodal} \
+        --out_barplot_proseg {output.barplot_proseg} \
         --out_boxplot {output.boxplot} \
         &> {log}
         """
