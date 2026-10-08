@@ -7,6 +7,7 @@ helpers shared with analysis_repo (multimodal_readwrite, xenium_readwrite), so t
 the same as those of read_xenium_proteomics_sample there. Writes:
   - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
   - an overlay of Xenium and aligned proteomics centroids
+  - per modality (Xenium, aligned proteomics), the matched and the unmatched cells side by side
   - a bar plot of the number of Xenium, proteomics, matched and unmatched proteomics cells
 """
 
@@ -17,8 +18,11 @@ import sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import numpy as np
 import pandas as pd
+import anndata as ad
+import squidpy as sq
 from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggplot, scale_fill_manual,
                       scale_y_continuous, theme, theme_classic, xlab, ylab)
 
@@ -38,6 +42,8 @@ def parse_args():
     parser.add_argument("--sample_id", default="", help="used in the plot titles")
     parser.add_argument("--out_matches", required=True)
     parser.add_argument("--out_overlay", required=True)
+    parser.add_argument("--out_matched_xenium", required=True)
+    parser.add_argument("--out_matched_proteomics", required=True)
     parser.add_argument("--out_counts", required=True)
     return parser.parse_args()
 
@@ -76,6 +82,39 @@ def match_cells(cells, aligned_um, xenium, max_dist):
     })
 
 
+def plot_matched_spatial(xy, matched, name, sample_id, out_file):
+    """Cells of one modality (centroids in Xenium µm): matched cells highlighted (left) and unmatched
+    cells highlighted (right), the other cells in gray, with squidpy's spatial scatter so both panels
+    keep the µm aspect ratio."""
+    gray = "#D9D9D9"
+    n_matched = int(matched.sum())
+    n_unmatched = len(xy) - n_matched
+    # figure height from the tissue's height/width ratio, so the equal-aspect panels fill the figure
+    extent = np.ptp(xy, axis=0)
+    panel_width = 6
+    fig, axes = plt.subplots(1, 2, figsize=(2 * panel_width + 2, panel_width * extent[1] / extent[0] + 1),
+                             layout="constrained")
+    panels = [(axes[0], matched, "matched", "unmatched", "#2166AC",
+               f"matched: {n_matched:,} / {len(xy):,} ({n_matched / len(xy):.1%})"),
+              (axes[1], ~matched, "unmatched", "matched", "#E66101",
+               f"unmatched: {n_unmatched:,} / {len(xy):,} ({n_unmatched / len(xy):.1%})")]
+    for ax, highlight, label, other, color, title in panels:
+        # minimal AnnData with the centroids (µm) in obsm["spatial"] and the match status in obs
+        status = pd.Categorical(np.where(highlight, label, other), categories=[label, other])
+        adata = ad.AnnData(obs=pd.DataFrame({"status": status}, index=[str(i) for i in range(len(xy))]))
+        adata.obsm["spatial"] = xy
+        # many points: squidpy scatter (no image), gray cells drawn first, highlighted cells on top
+        order = np.argsort(highlight, kind="stable")
+        sq.pl.spatial_scatter(adata[order], shape=None, color="status", img=False, size=0.5,
+                              palette=ListedColormap([color, gray]), ax=ax, frameon=True,
+                              legend_loc="right margin")
+        ax.set_title(title, fontsize=9)
+        ax.set_xlabel("x (µm)")
+        ax.set_ylabel("y (µm)")
+    fig.suptitle(f"{name} cells {sample_id}", fontsize=10)
+    savefig(None, out_file, dpi=200)
+
+
 def main():
     args = parse_args()
     set_mpl_rcparams()
@@ -104,6 +143,13 @@ def main():
     plt.legend(markerscale=30)
     savefig(None, args.out_overlay, dpi=200)
 
+    # matched / unmatched cells, one figure per modality
+    xenium_matched = xenium.index.isin(matches["xenium_cell_id"])
+    prot_matched = cells["cell_id"].isin(matches["proteomics_cell_id"]).to_numpy()
+    plot_matched_spatial(xenium_um, xenium_matched, "Xenium", args.sample_id, args.out_matched_xenium)
+    plot_matched_spatial(aligned_um, prot_matched, "Proteomics (aligned)", args.sample_id,
+                         args.out_matched_proteomics)
+
     # counts of Xenium, proteomics, matched and unmatched proteomics cells
     counts = pd.DataFrame({
         "modality": ["Xenium", "proteomics", "matched", "unmatched"],
@@ -111,7 +157,7 @@ def main():
     })
     counts["modality"] = pd.Categorical(counts["modality"], categories=counts["modality"], ordered=True)
     print(counts.to_string(index=False))
-    colors = {"Xenium": "#19618A", "proteomics": "#09B39C", "matched": "#FFB300", "unmatched": "#D32F2F"}
+    colors = {"Xenium": "#19618A", "proteomics": "#09B39C", "matched": "#2166AC", "unmatched": "#E66101"}
     p = (
         ggplot(counts, aes(x="modality", y="ncells", fill="modality"))
         + geom_col()

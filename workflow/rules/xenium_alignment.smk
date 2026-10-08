@@ -1,8 +1,8 @@
-### --- Alignment of the proteomics DAPI to the Xenium DAPI of the same slide, and QC plots ---
+### --- Xenium alignment: proteomics DAPI onto the Xenium DAPI of the same slide, QC plots ---
 # Methods come from config xenium_alignment: methods
 
 ALIGN_METHODS = config["xenium_alignment"]["methods"]
-# max_width values to align with (one output folder each), to compare registrations
+# max_width values to align with, one output folder each
 ALIGN_MAX_WIDTHS = config["xenium_alignment"]["insitupy"]["max_width"]
 
 wildcard_constraints:

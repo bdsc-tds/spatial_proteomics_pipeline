@@ -32,6 +32,7 @@ from experiments import (
     donor_samples,
     PANEL_TEMPLATE,
     get_panel_exts,
+    get_panel_globs,
     index_xenium_runs,
     iter_samples,
     layer_items,
@@ -127,7 +128,7 @@ def main():
     # scan raw sample folders
     default_exts = [args.image_ext] if args.image_ext else DEFAULT_IMAGE_EXTS
     panel_exts = get_panel_exts(experiments)
-    scanned = scan_raw_samples(base_path, panel_exts, default_exts)
+    scanned = scan_raw_samples(base_path, panel_exts, default_exts, get_panel_globs(experiments))
     # split folders by number of images found: exactly one (usable), none, several (ambiguous, skipped)
     with_image = {k: v[0] for k, v in scanned.items() if len(v) == 1}
     no_image = [k for k, v in scanned.items() if not v]

@@ -1,4 +1,4 @@
-# rule to subtract autofluorescence background channels from the raw image with backsub (COMET)
+# Subtract the autofluorescence background channels from the raw image with backsub (COMET)
 
 background_subtraction_dir = OUT + "/background_subtraction/{sample_id}/"
 

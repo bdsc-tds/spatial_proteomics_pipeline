@@ -1,13 +1,15 @@
 """Segment cells with Mesmer (deepcell, through SPACEc) on the prepared segmentation input.
 
-The input is the nuclear + membrane channel image written by prepare_image. SPACEc combines the
-membrane channels (max projection), segments nuclei and whole cells separately (tiled for large
-images) and derives the cytoplasm mask. Mesmer is run at the image's real pixel size (image_mpp).
+The input is the two-channel image written by prepare_image: "nuclear" and "membrane", each already
+the max projection of the panel's nuclear / membrane channels. SPACEc segments nuclei and whole cells
+separately (tiled for large images) and derives the cytoplasm mask. Mesmer is run at the image's real
+pixel size (image_mpp).
 Only the three label masks are kept, all labelled with the cell id (the nucleus and cytoplasm of a
 cell carry that cell's label); per-cell features are computed by quantify_cells on all channels. SPACEc's own feature tables are written to a temporary folder and discarded.
 """
 
 import argparse
+import gc
 import os
 import sys
 import tempfile
@@ -17,16 +19,15 @@ import numpy as np
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
-from readwrite import MultiplexImage
+from label_masks import save_label_masks
+from readwrite import SEGMENTATION_MEMBRANE, SEGMENTATION_NUCLEAR, MultiplexImage
 
 warnings.filterwarnings("ignore")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", required=True, help="segmentation input (OME-TIFF, nuclear + membrane channels)")
-    parser.add_argument("--nuclear_channel", required=True)
-    parser.add_argument("--membrane_channels", nargs="+", required=True)
+    parser.add_argument("--image", required=True, help=f"segmentation input (OME-TIFF, channels {SEGMENTATION_NUCLEAR!r} and {SEGMENTATION_MEMBRANE!r})")
     parser.add_argument("--model_dir", required=True, help="folder holding (or receiving) the downloaded Mesmer model")
     parser.add_argument("--out_cells", required=True)
     parser.add_argument("--out_nuclei", required=True)
@@ -52,7 +53,7 @@ def main():
     with MultiplexImage(args.image) as img:
         channel_names, pixel_size = img.channel_names, img.pixel_size_um
     print(f"channels: {channel_names}, pixel size: {pixel_size} µm/px")
-    missing = [c for c in [args.nuclear_channel] + args.membrane_channels if c not in channel_names]
+    missing = [c for c in (SEGMENTATION_NUCLEAR, SEGMENTATION_MEMBRANE) if c not in channel_names]
     if missing:
         sys.exit(f"channels {missing} not in {args.image}")
     if pixel_size is None:
@@ -72,8 +73,8 @@ def main():
             output_dir=tmp,
             output_fname="spacec",
             seg_method="mesmer",
-            nuclei_channel=args.nuclear_channel,
-            membrane_channel_list=args.membrane_channels,
+            nuclei_channel=SEGMENTATION_NUCLEAR,
+            membrane_channel_list=[SEGMENTATION_MEMBRANE],
             differentiate_nucleus_cytoplasm=True,
             input_format="Multichannel",
             image_mpp=pixel_size,
@@ -88,20 +89,17 @@ def main():
         sys.exit("Mesmer segmentation failed, see the SPACEc messages above")
 
     # SPACEc labels nuclei (separate Mesmer run) and cytoplasm (connected components) independently
-    # of the cells: relabel both with the id of the cell they lie in, so all three masks share
-    # cell_id. Nuclear pixels outside any cell are dropped.
-    cells = result["masks"].astype(np.int32)
+    # of the cells: keep the cell mask and the nuclear pixels, the nuclei and cytoplasm masks are
+    # rebuilt with the cell ids by save_label_masks
+    cells = result["masks"].astype(np.int32, copy=False)
     in_nucleus = result["masks_nuclei"] > 0
-    shared = {
-        args.out_cells: cells,
-        args.out_nuclei: np.where(in_nucleus, cells, 0),
-        args.out_cytoplasm: np.where(in_nucleus, 0, cells),
-    }
+    # drop SPACEc's images and masks before building the derived masks (a full-resolution Xenium
+    # mask is ~9 GB as int32)
+    result.clear()
+    gc.collect()
 
-    # save the label masks
-    for path, mask in shared.items():
-        np.save(path, mask)
-        print(f"written: {path} ({len(np.unique(mask)) - 1} labels)")
+    # write the three masks, all labelled with the cell id
+    save_label_masks(cells, in_nucleus, args.out_cells, args.out_nuclei, args.out_cytoplasm)
 
 
 if __name__ == "__main__":

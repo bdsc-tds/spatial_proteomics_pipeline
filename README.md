@@ -18,7 +18,10 @@ Raw images, one per sample folder:
 ```
 
 e.g. `codex/raw/NSCLC/human_IO60_metabolism/donor_01/donor_01/donor_01.qptiff`.
-Sample folders without an image yet (e.g. only a crop geojson) are ignored.
+Sample folders without an image yet (e.g. only a crop geojson) are ignored. The image may also sit
+deeper in the sample folder (`_image_glob`), e.g. Xenium protein data (`config/configs_xenium_mm/`),
+where the sample folder is the Xenium output folder and the image is the multi-file OME-TIFF opened
+through `morphology_focus/ch0000_*.ome.tif`.
 
 The sample ID used throughout is `tissue/panel/donor/sample`. All results go to a `processed/`
 folder next to `raw/` (`output_path` in the config), one folder per analysis:
@@ -27,8 +30,8 @@ folder next to `raw/` (`output_path` in the config), one folder per analysis:
 processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
-  segmentation/mesmer/{sample_id}/                  *_boundaries_mask.npy, feature_table.csv, *_boundaries.geojson, logs/
-  xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, mesmer_cell_matches.csv, figures/, logs/
+  segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.npy, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose)
+  xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
   snkmt.db                                          run monitoring database
 ```
 
@@ -56,7 +59,8 @@ One folder per dataset under `config/`, e.g. `config/configs_codex/`, holding a 
 ### config.yml
 
 `output_path`, the container, the `run:` switches and method settings (segmentation / alignment
-methods, Mesmer model folder, matching distance, GPU partition).
+methods, Mesmer / Cellpose model folders and Cellpose models and diameters, matching distance, GPU
+partition). Only the segmentation methods listed in `segmentation: methods` need a settings block.
 
 `config/config.yml` is a symlink to the active dataset's config (see [config/README.md](config/README.md)).
 
@@ -72,11 +76,17 @@ NSCLC:
     _technology: codex
     _image_ext: qptiff                          # image file extension in each sample folder
     _pixel_size_um: 0.5073566                   # fallback when the image carries no pixel size
-    _nuclear_channel: DAPI
-    _membrane_channels: [Pan-Cytokeratin, E-cadherin, CD45, Vimentin, CD31, SMA]   # Mesmer whole-cell signal
+    _nuclear_channels: [DAPI]                   # nuclear signal for segmentation; the first one is used for alignment
+    _membrane_channels: [Pan-Cytokeratin, E-cadherin, CD45, Vimentin, CD31, SMA]   # whole-cell signal for segmentation
     _background_subtraction: false              # COMET only
     donor_01: [donor_01]          # donor: [samples]
 ```
+
+Optional panel key: `_image_glob` (default `*`), where the image sits inside the sample folder.
+
+The nuclear and membrane signals given to the segmentation methods are each the per-pixel maximum of their channels
+(raw values), after removing every channel's pixel value offset read from the OME metadata (+100 on
+Xenium protein channels, 0 for DAPI, stains and formats without one).
 
 #### Creating / updating experiments.yml
 
@@ -127,9 +137,9 @@ Some rules run on the `gpu` partition:  (set `gpu: available: false` in the conf
 
 | Switch (`run:`) | Rules | What it does |
 |---|---|---|
-| `image_preparation` | `prepare_image` | Reads the raw image (qptiff or OME-TIFF) one channel at a time; writes the channel table, a DAPI image and a small segmentation input (nuclear + membrane channels) |
+| `image_preparation` | `prepare_image` | Reads the raw image (qptiff or OME-TIFF) one channel at a time; writes the channel table, a DAPI image and a two-channel segmentation input (nuclear and membrane max projections, offsets removed) |
 | `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/). When on, all later steps read the subtracted image |
-| `segmentation` | `segmentation_mesmer`, `quantify_cells`, `mask_to_geojson` | Mesmer (deepcell, through SPACEc) nucleus / whole-cell / cytoplasm masks; per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
+| `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Nucleus / whole-cell / cytoplasm masks for each method in `segmentation: methods`: Mesmer (deepcell, through SPACEc) and/or Cellpose 3 (through SPACEc: `nuclei` model on the nuclear signal, `cyto3` on membrane + nuclear, diameters set in µm); per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
 | `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
 
 Switches select what is built; upstream steps still run when a switched-on step needs them.
@@ -139,6 +149,12 @@ Switches select what is built; upstream steps still run when a switched-on step 
 - **New panel / technology:** put the images in `{raw}/{tissue}/{panel}/{donor}/{sample}/`, run
   `update-experiments` and fill in the new panel's `_` keys. qptiff and OME-TIFF are read by
   `workflow/scripts/utils/readwrite.py`; another format only needs support there.
+- **New segmentation method:** add `workflow/rules/_segmentation/<method>.smk` with a
+  `segmentation_<method>` rule writing `cell_`, `nuclei_` and `cytoplasm_boundaries_mask.npy` (all
+  labelled with the cell id, see `scripts/_segmentation/label_masks.py`) to
+  `segmentation/<method>/{sample_id}/`, add `quantify_cells_<method>` and `mask_to_geojson_<method>`
+  to `_segmentation/quantify_cells.smk` (`use rule quantify_cells_mesmer as quantify_cells_<method>
+  with:`, changing the paths), and list the method in `segmentation: methods`.
 - **New dataset:** copy `config/configs_codex/` to `config/configs_<name>/` and adapt `output_path`,
   `_base_path` and the switches.
 
@@ -154,6 +170,7 @@ workflow/
   Snakefile                              samples, helpers, run switches, rule all
   rules/<topic>.smk                      includes + run switch -> rules map
   rules/_<topic>/<method>.smk            the rules, ending with the step's _all rule
+  rules/_segmentation/quantify_cells.smk quantify_cells / mask_to_geojson of every segmentation method
   scripts/_<topic>/                      one argparse script per rule
   scripts/utils/                         experiments.yml handling, image reading, alignment helpers
 ```

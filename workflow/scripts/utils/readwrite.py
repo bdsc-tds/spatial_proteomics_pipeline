@@ -11,6 +11,10 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import tifffile
 
+# channel names of the two-channel segmentation input written by prepare_image and read by Mesmer
+SEGMENTATION_NUCLEAR = "nuclear"
+SEGMENTATION_MEMBRANE = "membrane"
+
 
 class MultiplexImage:
     """Level-0 channels of a multiplexed image (qptiff or OME-TIFF), read one plane at a time.
@@ -38,9 +42,11 @@ class MultiplexImage:
         if self._tif.is_ome:
             self.channel_names = _ome_channel_names(self._tif.ome_metadata)
             self.pixel_size_um = _ome_pixel_size_um(self._tif.ome_metadata)
+            self.channel_offsets = _ome_channel_offsets(self._tif.ome_metadata)
         else:
             self.channel_names = [_qptiff_channel_name(p.description) for p in self._level.pages[: self.shape[0]]]
             self.pixel_size_um = None
+            self.channel_offsets = [0] * len(self.channel_names)
         # fall back to the generic TIFF resolution tags (qptiff, or OME without PhysicalSizeX)
         if self.pixel_size_um is None:
             self.pixel_size_um = _tiff_resolution_um(self._level.pages[0])
@@ -69,11 +75,20 @@ class MultiplexImage:
             raise KeyError(f"{self.path}: no channel {name!r}; channels are {self.channel_names}")
         return self.channel_names.index(name)
 
-    def read_channel(self, channel, maxworkers=None):
-        """One full-resolution channel plane (Y, X), by index or name."""
+    def read_channel(self, channel, maxworkers=None, subtract_offset=False):
+        """One full-resolution channel plane (Y, X), by index or name.
+
+        subtract_offset: remove the channel's pixel value offset (channel_offsets), clipping at 0.
+        """
         c = self.channel_index(channel) if isinstance(channel, str) else channel
         # each channel is one TIFF page, so only that plane is read from disk
-        return self._level.pages[c].asarray(maxworkers=maxworkers)
+        plane = self._level.pages[c].asarray(maxworkers=maxworkers)
+        # in place, so no second plane is allocated: raise values below the offset to it, then subtract
+        offset = self.channel_offsets[c]
+        if subtract_offset and offset:
+            np.maximum(plane, offset, out=plane)
+            plane -= np.asarray(offset, dtype=plane.dtype)
+        return plane
 
 
 def _qptiff_channel_name(description):
@@ -101,6 +116,28 @@ def _ome_channel_names(ome_xml):
     image = next(e for e in _ome_root(ome_xml).iter() if _local(e.tag) == "Image")
     # one <Channel Name=...> element per channel, in channel order
     return [e.get("Name") for e in image.iter() if _local(e.tag) == "Channel"]
+
+
+def _ome_channel_offsets(ome_xml):
+    """Pixel value offset of every channel of the first OME image, 0 where none is given.
+
+    Xenium writes it in each channel's MapAnnotation (<M K="Pixel value offset">): 100 for the
+    protein channels, 0 for DAPI and the morphology stains.
+    """
+    root = _ome_root(ome_xml)
+    # offset of every MapAnnotation that declares one, by annotation ID
+    offsets = {}
+    for ann in root.iter():
+        if _local(ann.tag) != "MapAnnotation":
+            continue
+        for m in ann.iter():
+            if _local(m.tag) == "M" and m.get("K") == "Pixel value offset":
+                offsets[ann.get("ID")] = int(float(m.text))
+    # each channel points to its annotation(s) through <AnnotationRef ID=...>
+    image = next(e for e in root.iter() if _local(e.tag) == "Image")
+    channels = [e for e in image.iter() if _local(e.tag) == "Channel"]
+    refs = [[r.get("ID") for r in ch if _local(r.tag) == "AnnotationRef"] for ch in channels]
+    return [next((offsets[i] for i in ids if i in offsets), 0) for ids in refs]
 
 
 # conversion of OME length units to µm

@@ -7,6 +7,7 @@ config/
   configs_codex/
     config.yml         output_path, container, run: switches, method settings
     experiments.yml    samples (tissue -> panel -> donor -> [samples]) and per-panel metadata
+  configs_xenium_mm/   Xenium RNA + protein (xenium_mm_10x), Mesmer + Cellpose on the protein channels
   config.yml -> configs_codex/config.yml     the active dataset (symlink)
 ```
 

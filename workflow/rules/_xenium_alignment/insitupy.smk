@@ -1,8 +1,7 @@
-# rules to register the proteomics DAPI image onto the Xenium DAPI (nuclei) image with insitupy, then
-# overlay the aligned proteomics cells on the Xenium cells and count matched cells.
-# Only samples with a Xenium run (donor + sample name match, see experiments.match_xenium_runs) get targets
+# Register the proteomics DAPI onto the Xenium DAPI with insitupy, then match cells and plot per
+# segmentation method. Samples with a Xenium run only. SEG_METHODS: segmentation.smk
 
-# {max_width}: size (px) of the shrunk copies insitupy matches features on, one output folder per value
+# {max_width}: px size of the shrunk copies used for feature matching, one folder per value
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
 insitupy_dir = OUT + "/xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/"
 
@@ -19,13 +18,18 @@ rule align_to_xenium_insitupy:
     output:
         affine=insitupy_dir + "affine_matrix.csv",
         matches=insitupy_dir + "figures/feature_matches.png",
+        # Xenium DAPI + registered proteomics DAPI (Xenium px grid)
+        registered=insitupy_dir + "dapi_registered.ome.tif",
+        dapi_overlay=insitupy_dir + "figures/dapi_overlay.png",
+        # each modality alone
+        dapi_xenium=insitupy_dir + "figures/dapi_xenium.png",
+        dapi_proteomics=insitupy_dir + "figures/dapi_proteomics_registered.png",
     params:
         xenium_dir=xenium_dir,
         min_good_matches=config["xenium_alignment"]["insitupy"]["min_good_matches_per_area"],
     resources:
-        # proteomics DAPI and Xenium nuclei images in memory, features matched on max_width px copies;
-        # codex: SIFT on the full-size proteomics image (~23k² px) needs far more (OOM at 50G)
-        runtime=lambda wildcards: 720 if wildcards.max_width == 'codex' else 360,
+        # codex: SIFT on the full-size image (~23k² px) runs out of memory at 50G
+        runtime=lambda wildcards: 360 if wildcards.max_width == 'codex' else 120,
         mem=lambda wildcards: '200G' if wildcards.max_width == 'codex' else '50G' # adjust for minimal rescaling option
     log:
         insitupy_dir + "logs/align_to_xenium_insitupy.log"
@@ -38,22 +42,29 @@ rule align_to_xenium_insitupy:
         --dapi {input.dapi} \
         --out_affine {output.affine} \
         --out_matches {output.matches} \
+        --out_registered {output.registered} \
+        --out_overlay {output.dapi_overlay} \
+        --out_xenium_dapi {output.dapi_xenium} \
+        --out_proteomics_dapi {output.dapi_proteomics} \
         --min_good_matches_per_area {params.min_good_matches} \
         --max_width {wildcards.max_width} \
         &> {log}
         """
 
-# aligned proteomics cells matched to Xenium cells, with overlay and count plots, per segmentation method
+# match aligned proteomics cells to Xenium cells; overlay and count plots per segmentation method
 rule plot_alignment:
     input:
         script=f"{workflow.basedir}/scripts/_xenium_alignment/plot_alignment.py",
-        feature_table=rules.quantify_cells.output.feature_table, # output from mesmer rule
+        # from quantify_cells_{seg_method}
+        feature_table=OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
         affine=xenium_alignment_dir + "affine_matrix.csv",
         xenium_cells=lambda wc: os.path.join(xenium_dir(wc), "cells.parquet"),
         xenium_experiment=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
     output:
         matches=xenium_alignment_dir + "{seg_method}_cell_matches.csv",
         overlay=xenium_alignment_dir + "figures/{seg_method}_overlay.png",
+        matched_xenium=xenium_alignment_dir + "figures/{seg_method}_matched_spatial_xenium.png",
+        matched_proteomics=xenium_alignment_dir + "figures/{seg_method}_matched_spatial_proteomics.png",
         counts=xenium_alignment_dir + "figures/{seg_method}_counts.png",
         counts_table=xenium_alignment_dir + "figures/{seg_method}_counts.csv", # written by savefig_plotnine
     params:
@@ -76,14 +87,14 @@ rule plot_alignment:
         --sample_id {wildcards.sample_id} \
         --out_matches {output.matches} \
         --out_overlay {output.overlay} \
+        --out_matched_xenium {output.matched_xenium} \
+        --out_matched_proteomics {output.matched_proteomics} \
         --out_counts {output.counts} \
         &> {log}
         """
 
-# fraction of Xenium cells matched to a proteomics cell, per alignment method, over all samples,
-# segmentation methods and max_width values. Besides the default Xenium multimodal segmentation (from the
-# plot_alignment counts), the script matches the proteomics cells to the Proseg segmentation of every
-# Xenium run that has one (xenium/processed/segmentation/proseg/..., checked by the script)
+# fraction of Xenium cells matched to a proteomics cell over all samples, segmentation methods and
+# max_width values, for the default Xenium segmentation and Proseg (when the run has one)
 xenium_alignment_summary_dir = OUT + "/xenium_alignment/{align_method}/summary/"
 
 rule plot_alignment_summary:

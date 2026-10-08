@@ -54,6 +54,7 @@ affine = ">=2.4"
 pyarrow = ">=14,<=21"
 pyyaml = "*"
 "ruamel.yaml" = "*"
+squidpy = ">=1.6"
 
 [pypi-dependencies]
 insitupy-spatial = "==0.11.0b3"
@@ -80,9 +81,18 @@ pandas = "*"
 tqdm = "*"
 # system library behind pyvips, which SPACEc imports at load time through tissuumaps
 libvips = "*"
+# CUDA runtime of the tensorflow 2.8.4 pip wheel (built against CUDA 11.2 / cuDNN 8): without them
+# tensorflow cannot load libcudart.so.11.0 / libcudnn.so.8 and Mesmer silently runs on CPU
+cudatoolkit = "11.2.*"
+cudnn = "8.1.*"
 
 [feature.spacec.pypi-dependencies]
 spacec = ">=0.1.2, <0.2"
+
+# the pip tensorflow only searches LD_LIBRARY_PATH for the CUDA libraries, not the env's lib/; keep
+# the existing path after it (apptainer --nv puts the host driver's libcuda there)
+[feature.spacec.activation.env]
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
 [feature.snakemake]
 platforms = ["linux-64"]

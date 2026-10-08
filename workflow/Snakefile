@@ -74,6 +74,11 @@ GPU = config.get("gpu", {}).get("available", False)
 GPU_PARTITION = config.get("gpu", {}).get("partition_name", "gpu") if GPU else "cpu"
 GPU_EXTRA = "--gres=gpu:1" if GPU else ""
 
+
+def gpu_threads(gpu=1, cpu=8):
+    """Threads for a GPU rule: few when the GPU does the work, more when it falls back to CPU."""
+    return gpu if GPU else cpu
+
 # --- rules ---
 include: "rules/image_preparation.smk"
 include: "rules/background_subtraction.smk"

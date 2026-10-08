@@ -1,5 +1,4 @@
-# rule to read one sample's multiplexed image (qptiff / OME-TIFF, raw or background-subtracted) and
-# write the technology-agnostic inputs of the downstream steps
+# Channel table, DAPI image and segmentation input of each sample (from qptiff / OME-TIFF)
 
 image_preparation_dir = OUT + "/image_preparation/{sample_id}/"
 
@@ -10,10 +9,10 @@ rule prepare_image:
     output:
         channels=image_preparation_dir + "channels.csv",
         dapi=image_preparation_dir + "dapi.ome.tif",
-        # only read by segmentation, deleted once every segmentation job has used it
+        # deleted once all segmentation jobs have read it
         segmentation_input=temp(image_preparation_dir + "segmentation_input.ome.tif"),
     params:
-        nuclear_channel=lambda wc: shlex.quote(panel_meta(wc)["nuclear_channel"]),
+        nuclear_channels=lambda wc: shell_list(panel_meta(wc)["nuclear_channels"]),
         membrane_channels=lambda wc: shell_list(panel_meta(wc)["membrane_channels"]),
         pixel_size=lambda wc: panel_meta(wc)["pixel_size_um"],
     # threads decode the compressed image tiles
@@ -30,7 +29,7 @@ rule prepare_image:
         """
         {PX} python {input.script} \
         --image {input.image} \
-        --nuclear_channel {params.nuclear_channel} \
+        --nuclear_channels {params.nuclear_channels} \
         --membrane_channels {params.membrane_channels} \
         --pixel_size_fallback {params.pixel_size} \
         --out_channels {output.channels} \
@@ -42,5 +41,5 @@ rule prepare_image:
 
 rule image_preparation_all:
     input:
-        # the temporary segmentation input is left out so that it is not kept as a final target
+        # temp segmentation input left out on purpose
         expand([rules.prepare_image.output.channels, rules.prepare_image.output.dapi], sample_id=SAMPLE_IDS),
