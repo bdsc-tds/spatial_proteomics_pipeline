@@ -22,7 +22,7 @@ rule segmentation_cellpose:
     resources:
         # both input planes, SPACEc's copies and the masks in memory
         runtime=360,
-        mem='80G',
+        mem='100G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

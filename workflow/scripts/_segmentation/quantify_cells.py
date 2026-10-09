@@ -1,7 +1,9 @@
 """Per-cell quantification of every channel from a cell label mask (any segmentation method).
 
 Writes a feature table with one row per cell: cell_id, centroid (px and µm), area (px and µm²) and
-the mean intensity of every image channel (columns named after the markers). The image is read one
+the mean intensity of every image channel (columns named after the markers), after removing each
+channel's pixel value offset from the image metadata (+100 on Xenium protein channels, 0 for DAPI,
+the morphology stains and every other technology). The image is read one
 channel plane at a time and the mask is processed in row blocks, so memory stays bounded for large
 images.
 """
@@ -70,16 +72,16 @@ def main():
     table["y_um"] = table["y_px"] * pixel_size
     table["area_um2"] = table["area_px"] * pixel_size**2
 
-    # mean intensity of every channel, one plane at a time
+    # mean intensity of every channel, one plane at a time, offset removed (Xenium protein: 100)
     with MultiplexImage(args.image) as img:
         if img.shape[1:] != mask.shape:
             sys.exit(f"image {img.shape[1:]} and mask {mask.shape} differ in size")
         intensities = {}
         for c, name in enumerate(img.channel_names):
-            plane = img.read_channel(c, args.threads)
+            plane = img.read_channel(c, args.threads, subtract_offset=True)
             sums = blockwise_bincount(mask, n_labels, args.block_rows, lambda y0, y1: plane[y0:y1])
             intensities[name] = sums[cells] / area[cells]
-            print(f"channel {c + 1}/{img.n_channels}: {name}")
+            print(f"channel {c + 1}/{img.n_channels}: {name} (offset {img.channel_offsets[c]} removed)")
     table = pd.concat([table, pd.DataFrame(intensities)], axis=1)
 
     table.to_csv(args.out_csv, index=False)

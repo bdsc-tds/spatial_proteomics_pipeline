@@ -19,7 +19,7 @@ rule segmentation_mesmer:
     resources:
         # both input planes and the masks in memory
         runtime=360,
-        mem='64G',
+        mem='120G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
