@@ -8,7 +8,8 @@ the same as those of read_xenium_proteomics_sample there. Writes:
   - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
   - an overlay of Xenium and aligned proteomics centroids
   - per modality (Xenium, aligned proteomics), the matched and the unmatched cells side by side
-  - a bar plot of the number of Xenium, proteomics, matched and unmatched proteomics cells
+  - a bar plot of the number of cells of each Xenium segmentation (--xenium_segs, then the default
+    10x_mm_5um one), of proteomics, matched and unmatched proteomics cells
 """
 
 import argparse
@@ -21,6 +22,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 import anndata as ad
 import squidpy as sq
 from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggplot, scale_fill_manual,
@@ -38,6 +40,8 @@ def parse_args():
     parser.add_argument("--feature_table", required=True, help="quantify_cells output (cell_id, x_px, y_px, ...)")
     parser.add_argument("--affine", required=True, help="3x3 matrix, proteomics px -> Xenium px")
     parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (cells table, experiment.xenium)")
+    parser.add_argument("--xenium_segs", nargs="*", default=[],
+                        help="name=output dir of other Xenium segmentations (10x cells.parquet or Proseg cell-metadata.csv.gz), cell numbers only")
     parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
     parser.add_argument("--sample_id", default="", help="used in the plot titles")
     parser.add_argument("--out_matches", required=True)
@@ -68,6 +72,16 @@ def read_xenium_cells(xenium_dir):
     xenium = read_xenium_sample(xenium_dir, anndata=True, gex_only=True).obs
     print(f"{len(xenium)} Xenium cells ({xenium_dir})")
     return xenium
+
+
+def count_xenium_cells(seg_dir):
+    """Number of cells of a Xenium segmentation output: 10x cells.parquet or Proseg cell-metadata.csv.gz."""
+    # 10x / Xenium Ranger: row count from the parquet metadata
+    cells_parquet = os.path.join(seg_dir, "cells.parquet")
+    if os.path.isfile(cells_parquet):
+        return pq.ParquetFile(cells_parquet).metadata.num_rows
+    # Proseg: one row per cell
+    return len(pd.read_csv(os.path.join(seg_dir, "cell-metadata.csv.gz"), usecols=[0]))
 
 
 def match_cells(cells, aligned_um, xenium, max_dist):
@@ -150,14 +164,22 @@ def main():
     plot_matched_spatial(aligned_um, prot_matched, "Proteomics (aligned)", args.sample_id,
                          args.out_matched_proteomics)
 
-    # counts of Xenium, proteomics, matched and unmatched proteomics cells
+    # cells of the other Xenium segmentations, name=dir
+    other_segs = dict(s.split("=", 1) for s in args.xenium_segs)
+    other_ncells = {seg: count_xenium_cells(d) for seg, d in sorted(other_segs.items())}
+
+    # counts of every Xenium segmentation, proteomics, matched and unmatched proteomics cells (matches
+    # to the default 10x_mm_5um segmentation)
     counts = pd.DataFrame({
-        "modality": ["Xenium", "proteomics", "matched", "unmatched"],
-        "ncells": [len(xenium), len(cells), len(matches), len(cells) - len(matches)],
+        "modality": [*other_ncells, "10x_mm_5um", "proteomics", "matched", "unmatched"],
+        "ncells": [*other_ncells.values(), len(xenium), len(cells), len(matches), len(cells) - len(matches)],
     })
     counts["modality"] = pd.Categorical(counts["modality"], categories=counts["modality"], ordered=True)
     print(counts.to_string(index=False))
-    colors = {"Xenium": "#19618A", "proteomics": "#09B39C", "matched": "#2166AC", "unmatched": "#E66101"}
+    colors = {"10x_mm_5um": "#19618A", "proteomics": "#09B39C", "matched": "#2166AC", "unmatched": "#E66101"}
+    # other Xenium segmentations: shades of purple
+    other_colors = ["#7B1FA2", "#BA68C8", "#4A148C", "#CE93D8"]
+    colors.update({seg: other_colors[i % len(other_colors)] for i, seg in enumerate(other_ncells)})
     p = (
         ggplot(counts, aes(x="modality", y="ncells", fill="modality"))
         + geom_col()

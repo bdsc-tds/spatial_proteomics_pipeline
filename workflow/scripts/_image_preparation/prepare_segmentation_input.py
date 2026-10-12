@@ -1,11 +1,9 @@
-"""Prepare one sample's image for the technology-agnostic downstream steps.
+"""Write one sample's two-channel segmentation input.
 
 Reads the raw (or background-subtracted) multiplexed image one channel at a time and writes:
-  - channels.csv:              channel_index, marker_name of every channel
-  - dapi.ome.tif:              the first nuclear channel (used for alignment to Xenium DAPI)
-  - segmentation_input.ome.tif: two channels, "nuclear" and "membrane" (Mesmer input), each the
-                               per-pixel maximum of its channels after removing every channel's pixel
-                               value offset (e.g. +100 on Xenium protein channels; 0 elsewhere)
+  - segmentation_input.ome.tif: two channels, "nuclear" and "membrane" (Mesmer/Cellpose input), each
+                                the per-pixel maximum of its channels after removing every channel's
+                                pixel value offset (e.g. +100 on Xenium protein channels; 0 elsewhere)
 Fails if the configured nuclear or membrane channels are missing from the image.
 """
 
@@ -14,21 +12,19 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
-from readwrite import SEGMENTATION_MEMBRANE, SEGMENTATION_NUCLEAR, MultiplexImage, write_ome_tiff
+from readwrite import (SEGMENTATION_MEMBRANE, SEGMENTATION_NUCLEAR, MultiplexImage, resolve_pixel_size,
+                       write_ome_tiff)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="qptiff or OME-TIFF image")
-    parser.add_argument("--nuclear_channels", nargs="+", required=True, help="combined (max) into the nuclear signal; the first one is written to dapi.ome.tif")
+    parser.add_argument("--nuclear_channels", nargs="+", required=True, help="combined (max) into the nuclear signal")
     parser.add_argument("--membrane_channels", nargs="+", required=True, help="combined (max) into the membrane signal")
     parser.add_argument("--pixel_size_fallback", type=float, required=True, help="µm/px used when the image metadata has none")
-    parser.add_argument("--out_channels", required=True)
-    parser.add_argument("--out_dapi", required=True)
     parser.add_argument("--out_segmentation_input", required=True)
     parser.add_argument("--threads", type=int, default=1)
     return parser.parse_args()
@@ -61,25 +57,8 @@ def main():
         if missing:
             sys.exit(f"channels {missing} not in image; available: {img.channel_names}")
 
-        # pixel size: image metadata first, config fallback otherwise
-        pixel_size = img.pixel_size_um or args.pixel_size_fallback
-        if img.pixel_size_um is None:
-            print(f"no pixel size in image metadata, using fallback {pixel_size} µm/px")
-        elif abs(img.pixel_size_um - args.pixel_size_fallback) / args.pixel_size_fallback > 0.01:
-            print(f"WARNING: image pixel size {img.pixel_size_um:.5f} µm/px differs from the configured "
-                  f"{args.pixel_size_fallback} µm/px; using the image value")
+        pixel_size = resolve_pixel_size(img, args.pixel_size_fallback)
         print(f"pixel size: {pixel_size:.5f} µm/px")
-
-        # channel table
-        pd.DataFrame({"channel_index": range(img.n_channels), "marker_name": img.channel_names}).to_csv(
-            args.out_channels, index=False)
-
-        # first nuclear channel alone (raw values), for the alignment to Xenium
-        dapi_channel = args.nuclear_channels[0]
-        write_ome_tiff(args.out_dapi, [img.read_channel(dapi_channel, args.threads)],
-                       shape=img.shape[1:], dtype=img.dtype, channel_names=[dapi_channel],
-                       pixel_size_um=pixel_size)
-        print(f"written: {args.out_dapi}")
 
         # nuclear and membrane signals, built one after the other so only one projection is in memory
         groups = {SEGMENTATION_NUCLEAR: args.nuclear_channels, SEGMENTATION_MEMBRANE: args.membrane_channels}

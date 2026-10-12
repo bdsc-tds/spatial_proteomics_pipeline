@@ -303,6 +303,37 @@ def match_xenium_runs(donor, sample, xenium_runs):
     )
 
 
+# output folder of each Xenium segmentation inside its run folder, and the file marking it complete
+XENIUM_SEG_LAYOUTS = (
+    ("raw_results", "expected-counts.csv.gz"),  # Proseg
+    (os.path.join("normalised_results", "outs"), "cells.parquet"),  # Xenium Ranger
+)
+
+
+def xenium_segmentations(xenium_dir):
+    """Segmentations of one Xenium run in the processed folder of xenium_analysis_pipeline,
+    {base}/processed/segmentation/{seg}/{run} for xenium_dir {base}/raw/{run}.
+
+    xenium_dir: raw Xenium run dir (the "xenium" entry of get_samples).
+    Returns {segmentation folder name: (output dir readable by read_xenium_sample, its marker file)};
+    segmentation folders without a complete output are left out.
+    """
+    segs = {}
+    # processed folder next to the raw one
+    if "/raw/" not in xenium_dir:
+        return segs
+    base, run = xenium_dir.rstrip("/").rsplit("/raw/", 1)
+    # every segmentation folder holding this run, in the first layout whose marker file exists
+    for seg_dir in sorted(glob.glob(os.path.join(base, "processed", "segmentation", "*", ""))):
+        seg = os.path.basename(os.path.dirname(seg_dir))
+        for sub, marker in XENIUM_SEG_LAYOUTS:
+            out_dir = os.path.join(seg_dir, run, sub)
+            if os.path.isfile(os.path.join(out_dir, marker)):
+                segs[seg] = (out_dir, os.path.join(out_dir, marker))
+                break
+    return segs
+
+
 def unlisted_samples(experiments, experiments_path=None):
     """Samples on disk that experiments.yml does not list yet.
 

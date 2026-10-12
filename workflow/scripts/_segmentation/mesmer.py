@@ -1,6 +1,6 @@
 """Segment cells with Mesmer (deepcell, through SPACEc) on the prepared segmentation input.
 
-The input is the two-channel image written by prepare_image: "nuclear" and "membrane", each already
+The input is the two-channel image written by prepare_segmentation_input: "nuclear" and "membrane", each already
 the max projection of the panel's nuclear / membrane channels. SPACEc segments nuclei and whole cells
 separately (tiled for large images) and derives the cytoplasm mask. Mesmer is run at the image's real
 pixel size (image_mpp).

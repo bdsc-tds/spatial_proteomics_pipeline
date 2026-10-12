@@ -6,7 +6,7 @@ mesmer_dir = OUT + "/segmentation/mesmer/{sample_id}/"
 rule segmentation_mesmer:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/mesmer.py",
-        # from prepare_image
+        # from prepare_segmentation_input
         image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
     output:
         cells=temp(mesmer_dir + "cell_boundaries_mask.npy"),

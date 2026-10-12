@@ -37,7 +37,7 @@ from xenium_readwrite import read_xenium_sample, read_xenium_specs
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (holding experiment.xenium)")
-    parser.add_argument("--dapi", required=True, help="proteomics DAPI image (dapi.ome.tif from prepare_image)")
+    parser.add_argument("--dapi", required=True, help="proteomics DAPI image (dapi.ome.tif from prepare_dapi)")
     parser.add_argument("--out_affine", required=True)
     parser.add_argument("--out_matches", required=True, help="QC figure of the matched features")
     parser.add_argument("--out_registered", required=True,

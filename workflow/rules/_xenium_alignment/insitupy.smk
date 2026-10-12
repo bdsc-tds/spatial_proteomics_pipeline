@@ -10,10 +10,15 @@ def xenium_dir(wildcards):
     return SAMPLES[wildcards.sample_id]["xenium"]
 
 
+# Xenium segmentations of each sample, as named in the Xenium processed/segmentation folder:
+# {sample_id: {xenium_seg: (output dir, marker file)}}
+XENIUM_SEGS = {s: xenium_segmentations(SAMPLES[s]["xenium"]) for s in XENIUM_SAMPLE_IDS}
+
+
 rule align_to_xenium_insitupy:
     input:
         script=f"{workflow.basedir}/scripts/_xenium_alignment/insitupy_alignment.py",
-        dapi=rules.prepare_image.output.dapi,
+        dapi=rules.prepare_dapi.output.dapi,
         xenium=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
     output:
         affine=insitupy_dir + "affine_matrix.csv",
@@ -60,15 +65,19 @@ rule plot_alignment:
         affine=xenium_alignment_dir + "affine_matrix.csv",
         xenium_cells=lambda wc: os.path.join(xenium_dir(wc), "cells.parquet"),
         xenium_experiment=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
+        # other Xenium segmentations of the sample (processed folder), cell numbers only
+        xenium_segs=lambda wc: [marker for _, marker in XENIUM_SEGS[wc.sample_id].values()],
     output:
-        matches=xenium_alignment_dir + "{seg_method}_cell_matches.csv",
-        overlay=xenium_alignment_dir + "figures/{seg_method}_overlay.png",
-        matched_xenium=xenium_alignment_dir + "figures/{seg_method}_matched_spatial_xenium.png",
-        matched_proteomics=xenium_alignment_dir + "figures/{seg_method}_matched_spatial_proteomics.png",
-        counts=xenium_alignment_dir + "figures/{seg_method}_counts.png",
-        counts_table=xenium_alignment_dir + "figures/{seg_method}_counts.csv", # written by savefig_plotnine
+        matches=xenium_alignment_dir + "{seg_method}/cell_matches.csv",
+        overlay=xenium_alignment_dir + "figures/{seg_method}/overlay.png",
+        matched_xenium=xenium_alignment_dir + "figures/{seg_method}/matched_spatial_xenium.png",
+        matched_proteomics=xenium_alignment_dir + "figures/{seg_method}/matched_spatial_proteomics.png",
+        counts=xenium_alignment_dir + "figures/{seg_method}/counts.png",
+        counts_table=xenium_alignment_dir + "figures/{seg_method}/counts.csv", # written by savefig_plotnine
     params:
         xenium_dir=xenium_dir,
+        # name=output dir of each other Xenium segmentation
+        xenium_segs=lambda wc: [f"{seg}={d}" for seg, (d, _) in XENIUM_SEGS[wc.sample_id].items()],
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
     resources:
         runtime=60,
@@ -83,6 +92,7 @@ rule plot_alignment:
         --feature_table {input.feature_table} \
         --affine {input.affine} \
         --xenium_dir {params.xenium_dir} \
+        --xenium_segs {params.xenium_segs:q} \
         --max_dist {params.max_dist} \
         --sample_id {wildcards.sample_id} \
         --out_matches {output.matches} \

@@ -1,6 +1,6 @@
 """Segment cells with Cellpose 3 (through SPACEc) on the prepared segmentation input.
 
-The input is the two-channel image written by prepare_image: "nuclear" and "membrane", each already
+The input is the two-channel image written by prepare_segmentation_input: "nuclear" and "membrane", each already
 the max projection of the panel's nuclear / membrane channels. Cellpose runs twice, both tiled and
 stitched by SPACEc for large images: the nuclear model on the nuclear signal alone, and the
 whole-cell model on membrane + nuclear (SPACEc's own nucleus/cytoplasm mode would run the whole-cell

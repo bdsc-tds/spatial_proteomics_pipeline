@@ -1,9 +1,9 @@
 """Summarise the alignment to Xenium over all samples: fraction of Xenium cells matched to a proteomics cell.
 
-Reads the cell counts tables written by plot_alignment.py ({seg_method}_counts.csv, matches to the
+Reads the cell counts tables written by plot_alignment.py ({seg_method}/counts.csv, matches to the
 default Xenium multimodal segmentation), one per alignment method, max_width, sample and segmentation
 method; the wildcards are recovered from the paths, relative to --root (OUT/xenium_alignment):
-  {align_method}/max_width_{max_width}/{sample_id}/figures/{seg_method}_counts.csv
+  {align_method}/max_width_{max_width}/{sample_id}/figures/{seg_method}/counts.csv
 For every sample whose Xenium run also has a Proseg segmentation
 (xenium/processed/segmentation/proseg/<raw run path>/raw_results), the proteomics cells are matched
 to the Proseg cells as well, with the same functions as plot_alignment.py. Samples without a Proseg
@@ -57,8 +57,8 @@ def read_counts(path, root):
     """One row: wildcards of the counts table and its number of Xenium / matched cells."""
     # wildcards from the path relative to root
     parts = os.path.relpath(path, root).split(os.sep)
-    align_method, max_width, seg_method = parts[0], parts[1].removeprefix("max_width_"), parts[-1].removesuffix("_counts.csv")
-    sample_id = "/".join(parts[2:-2])
+    align_method, max_width, seg_method = parts[0], parts[1].removeprefix("max_width_"), parts[-2]
+    sample_id = "/".join(parts[2:-3])
     # cell numbers per modality
     ncells = pd.read_csv(path, index_col=0).set_index("modality")["ncells"]
     return {
@@ -67,7 +67,7 @@ def read_counts(path, root):
         "sample_id": sample_id,
         "seg_method": seg_method,
         "xenium_seg": "multimodal",
-        "n_xenium": ncells["Xenium"],
+        "n_xenium": ncells["10x_mm_5um"],
         "n_proteomics": ncells["proteomics"],
         "n_matched": ncells["matched"],
     }

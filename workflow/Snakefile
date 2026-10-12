@@ -10,7 +10,7 @@ import shlex
 import sys
 
 sys.path.insert(0, f"{workflow.basedir}/scripts/utils")
-from experiments import get_samples, load_experiments, resolve_path, unlisted_samples
+from experiments import get_samples, load_experiments, resolve_path, unlisted_samples, xenium_segmentations
 
 localrules: all
 
@@ -30,8 +30,8 @@ OUT = config["output_path"].rstrip("/")
 EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
 EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
 SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
-SAMPLE_IDS = list(SAMPLES)
-XENIUM_SAMPLE_IDS = [s for s, v in SAMPLES.items() if v["xenium"]]
+SAMPLE_IDS = list(SAMPLES)[:1]
+XENIUM_SAMPLE_IDS = [s for s in SAMPLE_IDS if SAMPLES[s]["xenium"]]
 print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
 
 # warn (only) about raw samples not yet listed in experiments.yml

@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import tifffile
 
-# channel names of the two-channel segmentation input written by prepare_image and read by Mesmer
+# channel names of the two-channel segmentation input written by prepare_segmentation_input and read by Mesmer
 SEGMENTATION_NUCLEAR = "nuclear"
 SEGMENTATION_MEMBRANE = "membrane"
 
@@ -89,6 +89,19 @@ class MultiplexImage:
             np.maximum(plane, offset, out=plane)
             plane -= np.asarray(offset, dtype=plane.dtype)
         return plane
+
+
+def resolve_pixel_size(img, fallback):
+    """Pixel size in µm/px: image metadata first, the configured fallback otherwise."""
+    # no metadata: use the fallback
+    if img.pixel_size_um is None:
+        print(f"no pixel size in image metadata, using fallback {fallback} µm/px")
+        return fallback
+    # metadata disagrees with the config by >1%: warn but trust the image
+    if abs(img.pixel_size_um - fallback) / fallback > 0.01:
+        print(f"WARNING: image pixel size {img.pixel_size_um:.5f} µm/px differs from the configured "
+              f"{fallback} µm/px; using the image value")
+    return img.pixel_size_um
 
 
 def _qptiff_channel_name(description):

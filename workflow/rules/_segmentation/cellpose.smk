@@ -6,7 +6,7 @@ cellpose_dir = OUT + "/segmentation/cellpose/{sample_id}/"
 rule segmentation_cellpose:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/cellpose_segmentation.py",
-        # from prepare_image
+        # from prepare_segmentation_input
         image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
     output:
         cells=temp(cellpose_dir + "cell_boundaries_mask.npy"),
@@ -21,7 +21,7 @@ rule segmentation_cellpose:
     threads: 1
     resources:
         # both input planes, SPACEc's copies and the masks in memory
-        runtime=360,
+        runtime=180,
         mem='100G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
