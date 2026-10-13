@@ -19,6 +19,8 @@
 *.txt
 *.tsv
 *.csv
+# except the cell type signature tables (TACIT), which are pipeline inputs
+!config/**/signatures/*.csv
 *.xlsx
 *.xls
 *.json

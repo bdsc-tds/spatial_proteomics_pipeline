@@ -5,14 +5,16 @@ name = "spatial_proteomics_pipeline"
 platforms = ["linux-64"]
 version = "0.1.0"
 
-# three environments only:
+# four environments only:
 #   default   - everything except Mesmer (image preparation, backsub, quantification, insitupy
 #               alignment, plots, experiments.yml tooling)
 #   spacec    - Mesmer segmentation (deepcell / tensorflow 2.8 need python <3.11 and numpy <2)
+#   tacit     - TACIT cell type annotation (R only)
 #   snakemake - the pipeline driver, kept small; runs outside the container (see run.sh)
 [environments]
 default = {features=["default"]}
 spacec = {features=["spacec"], no-default-feature=true}
+tacit = {features=["tacit"], no-default-feature=true}
 snakemake = {features=["snakemake"], no-default-feature=true}
 
 [tasks]
@@ -44,6 +46,8 @@ geopandas = ">=1.1"
 shapely = ">=2.1"
 anndata = ">=0.11"
 scanpy = ">=1.11,<2"
+# Leiden clustering in preprocess_protein (TACIT plots)
+python-igraph = "*"
 spatialdata = ">=0.8.0,<0.9"
 muon = ">=0.1.9,<0.2"
 h5py = ">=3.16.0,<4"
@@ -55,6 +59,8 @@ pyarrow = ">=14,<=21"
 pyyaml = "*"
 "ruamel.yaml" = "*"
 squidpy = ">=1.6"
+# exploratory notebooks (workflow/notebooks/)
+ipykernel = ">=7.3.0,<8"
 
 [pypi-dependencies]
 insitupy-spatial = "==0.11.0b3"
@@ -63,6 +69,7 @@ backsub = "==0.5.1"
 spatialdata-io = ">=0.7.0,<0.8"
 # insitupy's image registration was validated with opencv 4.13; opencv 5 is untested
 opencv-python = ">=4.8,<5"
+pycomplexheatmap = "*"
 
 # SPACEc pins python <3.11, matplotlib==3.9, cellpose==3.0.11 and torch<2.6, and deepcell pulls
 # tensorflow 2.8, so it cannot share the default environment (copied from analysis_repo)
@@ -93,6 +100,41 @@ spacec = ">=0.1.2, <0.2"
 # the existing path after it (apptainer --nv puts the host driver's libcuda there)
 [feature.spacec.activation.env]
 LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+
+# TACIT (workflow/scripts/_cell_type_annotation/TACIT_function.R, vendored: the GitHub package does
+# not install). These are the packages that file loads; leidenbase backs Seurat's Leiden clustering
+[feature.tacit]
+platforms = ["linux-64"]
+
+[feature.tacit.dependencies]
+r-base = "4.4.*"
+r-seurat = ">=5.0.3"
+r-leidenbase = "*"
+r-segmented = "*"
+r-ggplot2 = "*"
+r-dplyr = "*"
+r-rann = "*"
+r-igraph = "*"
+r-rpart = "*"
+r-future = "*"
+"r-future.apply" = "*"
+r-parallelly = "*"
+r-uwot = "*"
+r-matrix = "*"
+r-foreach = "*"
+r-doparallel = "*"
+r-caret = "*"
+r-mclust = "*"
+"r-data.table" = "*"
+r-optparse = "*"
+
+# only the env's own R library: ~/.Renviron (read in the container too, $HOME is bound) and the
+# shell can point R at a personal library built for another R version
+[feature.tacit.activation.env]
+R_ENVIRON_USER = "/dev/null"
+R_PROFILE_USER = "/dev/null"
+R_LIBS_SITE = "$CONDA_PREFIX/lib/R/library"
+R_LIBS_USER = "$CONDA_PREFIX/lib/R/library"
 
 [feature.snakemake]
 platforms = ["linux-64"]

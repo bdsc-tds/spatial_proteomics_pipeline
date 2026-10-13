@@ -1,5 +1,6 @@
 # Spatial proteomics pipeline: image preparation, (background subtraction), segmentation,
-# quantification and optional DAPI alignment to Xenium, for any multiplexed imaging technology.
+# quantification, optional DAPI alignment to Xenium and cell type annotation (TACIT), for any
+# multiplexed imaging technology.
 #
 # The config comes from the profile (configfile: config/config.yml) or --configfile; samples come
 # from the experiments.yml it points to (tissue/panel/donor/sample). See README.md.
@@ -30,7 +31,7 @@ OUT = config["output_path"].rstrip("/")
 EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
 EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
 SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
-SAMPLE_IDS = list(SAMPLES)[:1]
+SAMPLE_IDS = list(SAMPLES)
 XENIUM_SAMPLE_IDS = [s for s in SAMPLE_IDS if SAMPLES[s]["xenium"]]
 print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
 
@@ -84,6 +85,7 @@ include: "rules/image_preparation.smk"
 include: "rules/background_subtraction.smk"
 include: "rules/segmentation.smk"
 include: "rules/xenium_alignment.smk"
+include: "rules/cell_type_annotation.smk"
 
 # function that selects which rules to run based on dictionaries below
 def get_targets(run, run_rules):
@@ -111,10 +113,16 @@ run_xenium_alignment = {
     "xenium_alignment": config["run"]["xenium_alignment"],
 }
 
+# cell type annotation rules (TACIT labels, plots)
+run_cell_type_annotation = {
+    "cell_type_annotation": config["run"]["cell_type_annotation"],
+}
+
 targets_image_preparation = get_targets(run_image_preparation, run_rules_image_preparation)
 targets_background_subtraction = get_targets(run_background_subtraction, run_rules_background_subtraction)
 targets_segmentation = get_targets(run_segmentation, run_rules_segmentation)
 targets_xenium_alignment = get_targets(run_xenium_alignment, run_rules_xenium_alignment)
+targets_cell_type_annotation = get_targets(run_cell_type_annotation, run_rules_cell_type_annotation)
 
 rule all:
     input:
@@ -122,3 +130,4 @@ rule all:
         targets_background_subtraction,
         targets_segmentation,
         targets_xenium_alignment,
+        targets_cell_type_annotation,

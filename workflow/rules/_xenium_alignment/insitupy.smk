@@ -34,8 +34,8 @@ rule align_to_xenium_insitupy:
         min_good_matches=config["xenium_alignment"]["insitupy"]["min_good_matches_per_area"],
     resources:
         # codex: SIFT on the full-size image (~23k² px) runs out of memory at 50G
-        runtime=lambda wildcards: 360 if wildcards.max_width == 'codex' else 120,
-        mem=lambda wildcards: '200G' if wildcards.max_width == 'codex' else '50G' # adjust for minimal rescaling option
+        runtime=lambda wildcards: 45 if wildcards.max_width == 'codex' else 30,
+        mem=lambda wildcards: '160G' if wildcards.max_width == 'codex' else '40G'
     log:
         insitupy_dir + "logs/align_to_xenium_insitupy.log"
     container:
@@ -80,8 +80,8 @@ rule plot_alignment:
         xenium_segs=lambda wc: [f"{seg}={d}" for seg, (d, _) in XENIUM_SEGS[wc.sample_id].items()],
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
     resources:
-        runtime=60,
-        mem='16G',
+        runtime=30,
+        mem='8G',
     log:
         xenium_alignment_dir + "logs/{seg_method}_plot_alignment.log"
     container:

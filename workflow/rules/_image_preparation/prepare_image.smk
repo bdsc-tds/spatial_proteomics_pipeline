@@ -19,8 +19,8 @@ rule prepare_dapi:
     threads: 1
     resources:
         # one full-resolution channel plane (up to ~24k x 24k uint16) in memory
-        runtime=240,
-        mem='32G',
+        runtime=60,
+        mem='16G',
     log:
         image_preparation_dir + "logs/prepare_dapi.log"
     container:
@@ -53,8 +53,8 @@ rule prepare_segmentation_input:
     threads: 1
     resources:
         # one full-resolution channel plane (up to ~24k x 24k uint16) in memory at a time
-        runtime=240,
-        mem='32G',
+        runtime=60,
+        mem='16G',
     log:
         image_preparation_dir + "logs/prepare_segmentation_input.log"
     container:
