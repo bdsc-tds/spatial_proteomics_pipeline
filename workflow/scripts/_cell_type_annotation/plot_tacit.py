@@ -3,11 +3,11 @@
 Reads, per sample (same order in every list): the feature table of quantify_cells, the TACIT labels
 of run_tacit.R and the signature CSV of the sample's panel.
 Writes:
-  - a stacked bar plot of the fraction of each cell type per sample (+ its table)
+  - a stacked bar plot of the fraction of each cell type per sample
   - per sample, a heatmap of the mean normalized intensity (arcsinh(x / cofactor), z-score within
-    the sample) of every signature marker per cell type (+ its table)
+    the sample) of every signature marker per cell type
   - per sample, the UMAP of preprocess_protein (same cofactor) coloured by cell type, once on the
-    signature markers and once on all markers except --exclude (+ the UMAP coordinates)
+    signature markers and once on all markers except --exclude
 """
 
 import argparse
@@ -105,7 +105,7 @@ def plot_fractions(labels, ct_order, palette, out):
                 figure_size=(8, 0.4 * len(labels) + 2))
         + scale_y_continuous(expand=[0, 0, 0.01, 0])
     )
-    savefig_plotnine(p, counts, out)
+    savefig_plotnine(p, None, out)
 
 
 def normalize(features, markers, cofactor):
@@ -131,7 +131,7 @@ def plot_heatmap(features, cell_types, markers, cofactor, ct_order, title, out):
                           row_names_side="left", cmap="RdBu_r", center=0, vmin=-2, vmax=2,
                           label="mean z-score", xticklabels_kws={"labelrotation": 90}, verbose=0)
     plt.suptitle(title, y=1.02)
-    savefig(means.join(n_cells), out)
+    savefig(None, out)
 
 
 def umap_coordinates(feature_table, markers, cofactor, exclude):
@@ -160,7 +160,7 @@ def plot_umaps(coords, cell_types, ct_order, palette, title, out):
         ax.set(title=f"{name} markers", xlabel="UMAP1", ylabel="UMAP2", xticks=[], yticks=[])
     axes[-1].legend(bbox_to_anchor=(1.01, 1), loc="upper left", markerscale=8, frameon=False, title="TACIT cell type")
     fig.suptitle(title)
-    savefig(df, out)
+    savefig(None, out)
 
 
 def main(args):

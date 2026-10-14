@@ -2,7 +2,9 @@
 #
 # The signature markers are normalized with arcsinh(x / cofactor) followed by a z-score per marker
 # (shifted to min 0, see below), then TACIT (TACIT_function.R, next to this script) labels every cell. Writes one row per cell:
-# cell_id, cell_type ("Others" when unassigned) and the first two of TACIT's p UMAP dimensions.
+# cell_id, cell_type ("Others" when unassigned), the first two of TACIT's p UMAP dimensions, the cell
+# types whose CTR passes its threshold and whether TACIT treated the cell as mixed. Also writes the
+# per-cell CTR scores and the inferred thresholds (all in the normalized space below).
 #
 # Signature CSV: first column cell_type, then one column per marker (weights in [0, 1], empty = 0).
 
@@ -18,7 +20,9 @@ options_list <- list(
   make_option("--r", type = "double", help = "TACIT clustering resolution"),
   make_option("--p", type = "integer", help = "TACIT number of UMAP dimensions"),
   make_option("--threads", type = "integer", default = 1, help = "cores TACIT may use"),
-  make_option("--out_csv", help = "output CSV: cell_id, cell_type, UMAP1, UMAP2")
+  make_option("--out_csv", help = "output CSV: cell_id, cell_type, UMAP1, UMAP2, positive_cell_types, mixed"),
+  make_option("--out_ctr", help = "output CSV: cell_id, then the CTR score of every cell type"),
+  make_option("--out_thresholds", help = "output CSV: kind (cell_type = CTR threshold, marker = subset marker threshold), name, threshold")
 )
 args <- parse_args(OptionParser(option_list = options_list))
 
@@ -76,8 +80,35 @@ if (nrow(res) != nrow(features)) stop(sprintf("TACIT returned %d rows for %d cel
 labels <- res$TACIT
 labels <- ifelse(labels %in% ct_ids, signature$cell_type[match(labels, ct_ids)], labels)
 
+# cell types whose CTR passes its threshold in each cell (after TACIT's subset rules), "::"-joined
+positive <- as.matrix(attr(res, "positive")) == 1
+colnames(positive) <- signature$cell_type[match(colnames(positive), ct_ids)]
+positive_cell_types <- apply(positive, 1, function(x) paste(colnames(positive)[x], collapse = "::"))
+# mixed: cell of a mixed microcluster positive for several cell types, labelled by TACIT's kNN
+mixed <- seq_len(nrow(features)) %in% attr(res, "mixed_ids")
+
 # one row per cell, in feature table order (TACIT keeps the input order)
-out <- data.frame(cell_id = features$cell_id, cell_type = labels, UMAP1 = res$UMAP1, UMAP2 = res$UMAP2)
+out <- data.frame(cell_id = features$cell_id, cell_type = labels, UMAP1 = res$UMAP1, UMAP2 = res$UMAP2,
+                  positive_cell_types = positive_cell_types, mixed = mixed)
 fwrite(out, args$out_csv)
 cat("written:", args$out_csv, "\n")
 print(sort(table(out$cell_type), decreasing = TRUE))
+cat(sprintf("%d mixed cells (%.1f%%)\n", sum(mixed), 100 * mean(mixed)))
+
+# CTR scores (normalized markers %*% signature weights), one column per cell type
+ctr <- as.data.frame(attr(res, "ctr"))
+colnames(ctr) <- signature$cell_type[match(colnames(ctr), ct_ids)]
+fwrite(data.frame(cell_id = features$cell_id, ctr, check.names = FALSE), args$out_ctr)
+cat("written:", args$out_ctr, "\n")
+
+# CTR threshold per cell type, plus the marker thresholds TACIT fits for subset markers (if any)
+ctr_thr <- attr(res, "ctr_thresholds")
+thresholds <- data.frame(kind = "cell_type", name = signature$cell_type[match(ctr_thr$Name, ct_ids)],
+                         threshold = ctr_thr$value)
+marker_thr <- attr(res, "marker_thresholds")
+if (!is.null(marker_thr)) {
+  thresholds <- rbind(thresholds, data.frame(kind = "marker", name = markers[match(marker_thr$Name, marker_ids)],
+                                             threshold = marker_thr$value))
+}
+fwrite(thresholds, args$out_thresholds)
+cat("written:", args$out_thresholds, "\n")

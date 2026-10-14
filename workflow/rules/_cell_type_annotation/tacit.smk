@@ -1,5 +1,6 @@
 # TACIT cell type annotation per segmentation method, then plots over all samples: the mesmer rules
-# are the base, other methods derive from them with `use rule` (all inputs restated)
+# are the base, other methods derive from them with `use rule` (all inputs restated). Samples imaged
+# on Xenium also get TACIT on 10x's own protein intensities (xenium_{xenium_segmentation} folder)
 
 TACIT = config["cell_type_annotation"]["tacit"]
 
@@ -15,6 +16,26 @@ if len(TACIT_SAMPLE_IDS) < len(SAMPLE_IDS):
     print(f"WARNING: TACIT skips {len(SAMPLE_IDS) - len(TACIT_SAMPLE_IDS)} samples whose panel has no signature in "
           f"{os.path.dirname(CONFIG_PATH)}/signatures/", file=sys.stderr)
 
+# temporary to run on one sample
+TACIT_SAMPLE_IDS=TACIT_SAMPLE_IDS[:1]
+
+
+def tacit_xenium_dir(sample_id):
+    """Xenium output folder of a sample imaged on Xenium: the closest parent of its image holding experiment.xenium."""
+    d = os.path.dirname(SAMPLES[sample_id]["image"])
+    while d != os.path.dirname(d):
+        if os.path.isfile(os.path.join(d, "experiment.xenium")):
+            return d
+        d = os.path.dirname(d)
+    return None
+
+
+# Xenium segmentation of the run's own cells (config xenium_alignment: xenium_segmentation), names the output folder
+TACIT_XENIUM_SEG = config["xenium_alignment"]["xenium_segmentation"]
+# samples imaged on Xenium (technology xenium) whose panel has a signature
+TACIT_XENIUM_SAMPLE_IDS = [s for s in TACIT_SAMPLE_IDS
+                           if SAMPLES[s]["panel_meta"]["technology"] == "xenium" and tacit_xenium_dir(s)]
+
 # cell type of every cell of one sample (cell_id, cell_type, TACIT's UMAP1/UMAP2)
 rule tacit_mesmer:
     input:
@@ -24,6 +45,8 @@ rule tacit_mesmer:
         signature=lambda wc: tacit_signature(wc.sample_id),
     output:
         cell_types=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/cell_types.csv",
+        ctr=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/ctr.csv",
+        thresholds=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/thresholds.csv",
     params:
         cofactor=TACIT["cofactor"],
         r=TACIT["r"],
@@ -46,6 +69,8 @@ rule tacit_mesmer:
         --p {params.p} \
         --threads {threads} \
         --out_csv {output.cell_types} \
+        --out_ctr {output.ctr} \
+        --out_thresholds {output.thresholds} \
         &> {log}
         """
 
@@ -57,8 +82,53 @@ use rule tacit_mesmer as tacit_cellpose with:
         signature=lambda wc: tacit_signature(wc.sample_id),
     output:
         cell_types=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/cell_types.csv",
+        ctr=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/ctr.csv",
+        thresholds=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/thresholds.csv",
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/logs/tacit.log"
+
+# 10x protein intensities of the Xenium cells (read_xenium_sample) in the quantify_cells feature table format
+rule xenium_protein_table:
+    input:
+        script=f"{workflow.basedir}/scripts/_cell_type_annotation/xenium_protein_table.py",
+        xenium_cells=lambda wc: os.path.join(tacit_xenium_dir(wc.sample_id), "cells.parquet"),
+        xenium_experiment=lambda wc: os.path.join(tacit_xenium_dir(wc.sample_id), "experiment.xenium"),
+    output:
+        feature_table=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/feature_table.csv",
+    params:
+        xenium_dir=lambda wc: tacit_xenium_dir(wc.sample_id),
+    threads: 1
+    resources:
+        runtime=60,
+        mem='32G',
+    log:
+        OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/logs/xenium_protein_table.log"
+    container:
+        config["containers"]["pixi"]
+    shell:
+        """
+        {PX} python -u {input.script} \
+        --xenium_dir {params.xenium_dir} \
+        --out_csv {output.feature_table} \
+        &> {log}
+        """
+
+use rule tacit_mesmer as tacit_xenium with:
+    input:
+        script=f"{workflow.basedir}/scripts/_cell_type_annotation/run_tacit.R",
+        # from xenium_protein_table
+        feature_table=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/feature_table.csv",
+        signature=lambda wc: tacit_signature(wc.sample_id),
+    output:
+        cell_types=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/cell_types.csv",
+        ctr=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/ctr.csv",
+        thresholds=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/thresholds.csv",
+    params:
+        cofactor=TACIT["xenium_cofactor"],
+        r=TACIT["r"],
+        p=TACIT["p"],
+    log:
+        OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/logs/tacit.log"
 
 # cell type fractions over all samples; per sample, mean intensity heatmap and preprocess_protein UMAPs
 rule plot_tacit_mesmer:
@@ -71,12 +141,9 @@ rule plot_tacit_mesmer:
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/mesmer/summary/figures/cell_type_fractions.png",
-        fractions_table=OUT + "/cell_type_annotation/tacit/mesmer/summary/figures/cell_type_fractions.csv", # written by savefig_plotnine
         heatmaps=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/mean_intensity_heatmap.png",
                         sample_id=TACIT_SAMPLE_IDS),
         umaps=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/umap.png", sample_id=TACIT_SAMPLE_IDS),
-        umap_coords=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/umap.csv",
-                           sample_id=TACIT_SAMPLE_IDS), # written by savefig
     params:
         sample_ids=TACIT_SAMPLE_IDS,
         cofactor=TACIT["cofactor"],
@@ -115,19 +182,43 @@ use rule plot_tacit_mesmer as plot_tacit_cellpose with:
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/cellpose/summary/figures/cell_type_fractions.png",
-        fractions_table=OUT + "/cell_type_annotation/tacit/cellpose/summary/figures/cell_type_fractions.csv", # written by savefig_plotnine
         heatmaps=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/mean_intensity_heatmap.png",
                         sample_id=TACIT_SAMPLE_IDS),
         umaps=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/umap.png", sample_id=TACIT_SAMPLE_IDS),
-        umap_coords=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/umap.csv",
-                           sample_id=TACIT_SAMPLE_IDS), # written by savefig
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/summary/logs/plot_tacit.log"
 
-# TACIT labels and plots of every method in segmentation: methods
+use rule plot_tacit_mesmer as plot_tacit_xenium with:
+    input:
+        script=f"{workflow.basedir}/scripts/_cell_type_annotation/plot_tacit.py",
+        # from xenium_protein_table
+        feature_tables=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/feature_table.csv",
+                              sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        cell_types=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/cell_types.csv",
+                          sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        signatures=[tacit_signature(s) for s in TACIT_XENIUM_SAMPLE_IDS],
+    output:
+        fractions=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/figures/cell_type_fractions.png",
+        heatmaps=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/figures/mean_intensity_heatmap.png",
+                        sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        umaps=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/figures/umap.png",
+                     sample_id=TACIT_XENIUM_SAMPLE_IDS),
+    params:
+        sample_ids=TACIT_XENIUM_SAMPLE_IDS,
+        cofactor=TACIT["xenium_cofactor"],
+        exclude=TACIT["umap_exclude"],
+    log:
+        OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/logs/plot_tacit.log"
+
+# TACIT labels and plots of every method in segmentation: methods, and of the Xenium cells (samples imaged on Xenium)
 rule cell_type_annotation_all:
     input:
         expand(OUT + "/cell_type_annotation/tacit/{seg_method}/{sample_id}/cell_types.csv",
                seg_method=SEG_METHODS, sample_id=TACIT_SAMPLE_IDS),
         expand(OUT + "/cell_type_annotation/tacit/{seg_method}/summary/figures/cell_type_fractions.png",
                seg_method=SEG_METHODS),
+        expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/cell_types.csv",
+               sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        # no plot without Xenium samples (plot_tacit.py needs at least one)
+        [OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/figures/cell_type_fractions.png"]
+        if TACIT_XENIUM_SAMPLE_IDS else [],

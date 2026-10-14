@@ -531,6 +531,11 @@ TACIT <- function(data_expression, r, p, Signature) {
   potential_ct_test <- replace_zero_with_column_names_opt(Group_threshold_data)
   combined_vector <- apply(potential_ct_test, 1, function(x) paste(x[which(x != "0")], collapse = "::"))
   
+  # keep the CTR scores and per-cell binary CTR calls (after the subset rules) for the output attributes
+  # (ct is overwritten by a loop variable further down)
+  ctr_scores <- ct
+  positive_cells <- Group_threshold_data
+
   cat("Calculating group mixtures...\n")
   group_mix <- rowSums(Group_threshold_data)
   Group_threshold_data <- data.frame(ID = 1:nrow(Group_threshold_data), clusters, Group_threshold_data)
@@ -710,7 +715,14 @@ TACIT <- function(data_expression, r, p, Signature) {
   
   data_final=data.frame(TACIT=data_clean_final$mem,UMAP1=as.numeric(scfp@reductions[["umap"]]@cell.embeddings[,1]),
                         UMAP2=as.numeric(scfp@reductions[["umap"]]@cell.embeddings[,2]),data_expression)
-  
+
+  # intermediate results for the caller: CTR scores, thresholds, per-cell positive calls, mixed cells
+  attr(data_final, "ctr") <- ctr_scores
+  attr(data_final, "ctr_thresholds") <- final_threshold
+  attr(data_final, "marker_thresholds") <- if (exists("final_threshold2")) final_threshold2 else NULL
+  attr(data_final, "positive") <- positive_cells
+  attr(data_final, "mixed_ids") <- data_mixed$ID
+
   return(data_final)
 }
 

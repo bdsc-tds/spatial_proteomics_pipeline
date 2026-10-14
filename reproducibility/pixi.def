@@ -19,10 +19,10 @@ From: ubuntu:22.04
     # Move pixi bin to a global location so it's always found
     ln -s /opt/pixi/bin/pixi /usr/local/bin/pixi
 
-    # 3. Install all three environments into one image (default, spacec, snakemake)
+    # 3. Install all four environments into one image (default, spacec, tacit, snakemake)
     cd /app
     pixi config set --local run-post-link-scripts insecure
-    pixi install --locked -e default -e spacec -e snakemake
+    pixi install --locked -e default -e spacec -e tacit -e snakemake
 
     # 4. Create the 'px' shorthand for runtime
     echo '#!/bin/bash' > /usr/local/bin/px

@@ -106,6 +106,8 @@ rule plot_alignment:
 # fraction of Xenium cells matched to a proteomics cell over all samples, segmentation methods and
 # max_width values, for the default Xenium segmentation and Proseg (when the run has one)
 xenium_alignment_summary_dir = OUT + "/xenium_alignment/{align_method}/summary/"
+# default Xenium segmentation (matched in plot_alignment) and Proseg
+SUMMARY_XENIUM_SEGS = [config["xenium_alignment"]["xenium_segmentation"], "proseg"]
 
 rule plot_alignment_summary:
     input:
@@ -114,14 +116,21 @@ rule plot_alignment_summary:
                       sample_id=XENIUM_SAMPLE_IDS, allow_missing=True),
     output:
         table=xenium_alignment_summary_dir + "fraction_matched.csv",
-        barplot_multimodal=xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_multimodal.png",
-        barplot_proseg=xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_proseg.png",
+        # one per Xenium segmentation / proteomics segmentation, file names set in the script
+        barplots=expand(xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_{xenium_seg}_{seg_method}.png",
+                        xenium_seg=SUMMARY_XENIUM_SEGS, seg_method=SEG_METHODS, allow_missing=True),
+        # one per Xenium segmentation, the proteomics segmentations side by side at summary_max_width
+        barplots_seg_methods=expand(xenium_alignment_summary_dir + "figures/fraction_matched_per_seg_method_{xenium_seg}.png",
+                                    xenium_seg=SUMMARY_XENIUM_SEGS, allow_missing=True),
         boxplot=xenium_alignment_summary_dir + "figures/fraction_matched_per_max_width.png",
     params:
         root=OUT + "/xenium_alignment",
         seg_root=OUT + "/segmentation", # feature tables, for the Proseg matching
         experiments=EXPERIMENTS_PATH, # Xenium run of each sample, for the Proseg folder
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
+        xenium_seg=config["xenium_alignment"]["xenium_segmentation"],
+        summary_max_width=config["xenium_alignment"]["insitupy"]["summary_max_width"],
+        figures_dir=xenium_alignment_summary_dir + "figures",
     resources:
         # Proseg cells of every Xenium run read in turn
         runtime=240,
@@ -138,9 +147,10 @@ rule plot_alignment_summary:
         --seg_root {params.seg_root} \
         --experiments {params.experiments} \
         --max_dist {params.max_dist} \
+        --xenium_seg {params.xenium_seg} \
+        --summary_max_width {params.summary_max_width} \
         --out_table {output.table} \
-        --out_barplot_multimodal {output.barplot_multimodal} \
-        --out_barplot_proseg {output.barplot_proseg} \
+        --out_figures_dir {params.figures_dir} \
         --out_boxplot {output.boxplot} \
         &> {log}
         """

@@ -18,8 +18,8 @@ rule segmentation_mesmer:
     threads: 1
     resources:
         # both input planes and the masks in memory
-        runtime=360,
-        mem='120G',
+        runtime=180,
+        mem='48G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

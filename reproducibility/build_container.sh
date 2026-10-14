@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build the pipeline's pixi container (default / spacec / snakemake environments):
+# Build the pipeline's pixi container (default / spacec / tacit / snakemake environments):
 #   sbatch reproducibility/build_container.sh
 # The image is written to OUTPUT_DIR (override with: OUTPUT_DIR=/path sbatch ...), which must match
 # `containers: pixi:` in config/configs_*/config.yml
