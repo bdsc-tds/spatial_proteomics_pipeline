@@ -1,10 +1,5 @@
 ### --- Segmentation: masks per method, per-cell quantification, GeoJSON ---
-# one rule file per method, included only if listed in config segmentation: methods
-
-SEG_METHODS = config["segmentation"]["methods"]
-
-wildcard_constraints:
-    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
+# one rule file per method, included only if listed in config segmentation: methods (SEG_METHODS: Snakefile)
 
 # --- Rules ---
 for _seg_method in SEG_METHODS:

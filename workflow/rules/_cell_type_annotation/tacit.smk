@@ -47,6 +47,7 @@ rule tacit_mesmer:
         cell_types=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/cell_types.csv",
         ctr=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/ctr.csv",
         thresholds=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/thresholds.csv",
+        knn=OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/knn_fractions.csv",
     params:
         cofactor=TACIT["cofactor"],
         r=TACIT["r"],
@@ -71,6 +72,7 @@ rule tacit_mesmer:
         --out_csv {output.cell_types} \
         --out_ctr {output.ctr} \
         --out_thresholds {output.thresholds} \
+        --out_knn {output.knn} \
         &> {log}
         """
 
@@ -84,6 +86,7 @@ use rule tacit_mesmer as tacit_cellpose with:
         cell_types=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/cell_types.csv",
         ctr=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/ctr.csv",
         thresholds=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/thresholds.csv",
+        knn=OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/knn_fractions.csv",
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/logs/tacit.log"
 
@@ -123,6 +126,7 @@ use rule tacit_mesmer as tacit_xenium with:
         cell_types=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/cell_types.csv",
         ctr=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/ctr.csv",
         thresholds=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/thresholds.csv",
+        knn=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/knn_fractions.csv",
     params:
         cofactor=TACIT["xenium_cofactor"],
         r=TACIT["r"],
@@ -130,7 +134,8 @@ use rule tacit_mesmer as tacit_xenium with:
     log:
         OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/logs/tacit.log"
 
-# cell type fractions over all samples; per sample, mean intensity heatmap and preprocess_protein UMAPs
+# cell type and mixed / unique summaries over all samples; per sample, the same as bar plots and a mean intensity
+# heatmap. Only the cell type fraction plots are declared, the other figures are written next to them
 rule plot_tacit_mesmer:
     input:
         script=f"{workflow.basedir}/scripts/_cell_type_annotation/plot_tacit.py",
@@ -141,16 +146,14 @@ rule plot_tacit_mesmer:
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/mesmer/summary/figures/cell_type_fractions.png",
-        heatmaps=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/mean_intensity_heatmap.png",
-                        sample_id=TACIT_SAMPLE_IDS),
-        umaps=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/umap.png", sample_id=TACIT_SAMPLE_IDS),
+        sample_fractions=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/figures/cell_type_fractions.png",
+                                sample_id=TACIT_SAMPLE_IDS),
     params:
         sample_ids=TACIT_SAMPLE_IDS,
         cofactor=TACIT["cofactor"],
-        exclude=TACIT["umap_exclude"],
     threads: 1
     resources:
-        runtime=720,
+        runtime=120,
         mem='64G',
     log:
         OUT + "/cell_type_annotation/tacit/mesmer/summary/logs/plot_tacit.log"
@@ -164,11 +167,9 @@ rule plot_tacit_mesmer:
         --cell_types {input.cell_types} \
         --signatures {input.signatures} \
         --cofactor {params.cofactor} \
-        --exclude {params.exclude:q} \
         --threads {threads} \
         --out_fractions {output.fractions} \
-        --out_heatmaps {output.heatmaps} \
-        --out_umaps {output.umaps} \
+        --out_sample_fractions {output.sample_fractions} \
         &> {log}
         """
 
@@ -182,9 +183,8 @@ use rule plot_tacit_mesmer as plot_tacit_cellpose with:
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/cellpose/summary/figures/cell_type_fractions.png",
-        heatmaps=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/mean_intensity_heatmap.png",
-                        sample_id=TACIT_SAMPLE_IDS),
-        umaps=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/umap.png", sample_id=TACIT_SAMPLE_IDS),
+        sample_fractions=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/figures/cell_type_fractions.png",
+                                sample_id=TACIT_SAMPLE_IDS),
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/summary/logs/plot_tacit.log"
 
@@ -199,14 +199,11 @@ use rule plot_tacit_mesmer as plot_tacit_xenium with:
         signatures=[tacit_signature(s) for s in TACIT_XENIUM_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/figures/cell_type_fractions.png",
-        heatmaps=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/figures/mean_intensity_heatmap.png",
-                        sample_id=TACIT_XENIUM_SAMPLE_IDS),
-        umaps=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/figures/umap.png",
-                     sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        sample_fractions=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/figures/cell_type_fractions.png",
+                                sample_id=TACIT_XENIUM_SAMPLE_IDS),
     params:
         sample_ids=TACIT_XENIUM_SAMPLE_IDS,
         cofactor=TACIT["xenium_cofactor"],
-        exclude=TACIT["umap_exclude"],
     log:
         OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/logs/plot_tacit.log"
 

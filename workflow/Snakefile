@@ -81,11 +81,26 @@ def gpu_threads(gpu=1, cpu=8):
     return gpu if GPU else cpu
 
 # --- rules ---
-include: "rules/image_preparation.smk"
+# segmentation methods, also expanded by the alignment and cell type annotation rules
+SEG_METHODS = config["segmentation"]["methods"]
+
+wildcard_constraints:
+    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
+
+# a step switched off (config run:) is not loaded: the steps after it read its existing outputs as
+# plain input files (never re-run, missing input error if absent). Background subtraction is always
+# loaded: its switch also selects the image every step reads (source_image)
+run_rules_image_preparation, run_rules_segmentation = {}, {}
+run_rules_xenium_alignment, run_rules_cell_type_annotation = {}, {}
+if config["run"]["image_preparation"]:
+    include: "rules/image_preparation.smk"
 include: "rules/background_subtraction.smk"
-include: "rules/segmentation.smk"
-include: "rules/xenium_alignment.smk"
-include: "rules/cell_type_annotation.smk"
+if config["run"]["segmentation"]:
+    include: "rules/segmentation.smk"
+if config["run"]["xenium_alignment"]:
+    include: "rules/xenium_alignment.smk"
+if config["run"]["cell_type_annotation"]:
+    include: "rules/cell_type_annotation.smk"
 
 # function that selects which rules to run based on dictionaries below
 def get_targets(run, run_rules):

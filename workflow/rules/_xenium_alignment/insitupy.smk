@@ -1,5 +1,5 @@
 # Register the proteomics DAPI onto the Xenium DAPI with insitupy, then match cells and plot per
-# segmentation method. Samples with a Xenium run only. SEG_METHODS: segmentation.smk
+# segmentation method. Samples with a Xenium run only. SEG_METHODS: Snakefile
 
 # {max_width}: px size of the shrunk copies used for feature matching, one folder per value
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
@@ -18,7 +18,8 @@ XENIUM_SEGS = {s: xenium_segmentations(SAMPLES[s]["xenium"]) for s in XENIUM_SAM
 rule align_to_xenium_insitupy:
     input:
         script=f"{workflow.basedir}/scripts/_xenium_alignment/insitupy_alignment.py",
-        dapi=rules.prepare_dapi.output.dapi,
+        # from prepare_dapi
+        dapi=OUT + "/image_preparation/{sample_id}/dapi.ome.tif",
         xenium=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
     output:
         affine=insitupy_dir + "affine_matrix.csv",

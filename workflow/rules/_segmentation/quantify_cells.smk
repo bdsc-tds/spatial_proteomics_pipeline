@@ -15,8 +15,8 @@ rule quantify_cells_mesmer:
     threads: 1
     resources:
         # one channel plane and one mask row block in memory at a time
-        runtime=60,
-        mem='12G',
+        runtime=480,
+        mem='32G',
     log:
         OUT + "/segmentation/mesmer/{sample_id}/logs/quantify_cells.log"
     container:
@@ -55,7 +55,7 @@ rule mask_to_geojson_mesmer:
         nuclei=OUT + "/segmentation/mesmer/{sample_id}/nuclei_boundaries.geojson",
         cytoplasm=OUT + "/segmentation/mesmer/{sample_id}/cytoplasm_boundaries.geojson",
     resources:
-        runtime=60,
+        runtime=120,
         mem='16G',
     log:
         OUT + "/segmentation/mesmer/{sample_id}/logs/mask_to_geojson.log"

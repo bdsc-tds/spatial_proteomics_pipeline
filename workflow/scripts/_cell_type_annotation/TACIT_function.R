@@ -1,6 +1,11 @@
-# TACIT (Huynh et al., Nat Commun 16:3747, 2025), vendored unmodified from
+# TACIT (Huynh et al., Nat Commun 16:3747, 2025), vendored from
 # https://github.com/huynhkl953/TACIT/blob/faf623ad4042c5eb5c6cbee29dd39381a2f31742/R/TACIT_function.R
 # (commit faf623a, 2025-09-02): the GitHub package does not install (huynhkl953/TACIT issue #5).
+# Local changes: the output attributes at the end of TACIT() (incl. the kNN neighbour fractions of the
+# mixed cells, knn_result in the kNN step), and two for negative signature weights
+# (marked LOCAL CHANGE): CTR thresholds fitted on the positive-weight score and applied to the
+# penalized score, and the kNN marker selection of mixed cells (anb_select) so that negative weights
+# do not cancel markers.
 # Licence: CC BY-NC 4.0 (LICENSE of the repo). Called through run_tacit.R.
 
 library(Seurat)
@@ -419,7 +424,15 @@ TACIT <- function(data_expression, r, p, Signature) {
   Signature_matrix <- as.matrix(Signature[, -1]) # convert signature to matrix from data frame
   ct <- data_anb_matrix %*% t(Signature_matrix)
   colnames(ct) <- Signature[, 1]
-  
+  # LOCAL CHANGE (negative signature weights): CTR score from the positive weights only, used to fit
+  # the thresholds below. Fitting on ct itself fails: the negative weights push the dominant population
+  # (e.g. epithelium for Plasma cell) far below 0, the breakpoint fit then splits those clusters from
+  # all others and the threshold drops near or below 0 (more positive cells, not fewer). With the
+  # thresholds fitted here, the penalized ct only removes positive calls. Identical to ct when all
+  # weights are >= 0.
+  ct_pos <- as.data.frame(data_anb_matrix %*% t(pmax(Signature_matrix, 0)))
+  colnames(ct_pos) <- Signature[, 1]
+
   
   #  data_anb=scale(data_anb)
   
@@ -446,20 +459,15 @@ TACIT <- function(data_expression, r, p, Signature) {
     .packages = c("stats", "segmented", "dplyr"), .export = c("threshold_function", "threshold_groups")
   ) %dopar% {
     # Return the second element of the threshold_function result
-    vector <- threshold_function(k, ct, clusters)
+    # LOCAL CHANGE: thresholds fitted on the positive-weight score (ct_pos, see above)
+    vector <- threshold_function(k, ct_pos, clusters)
     return(vector[[2]])
   }
-  
-  # Process Group_threshold_data in parallel
-  Group_threshold_data <- foreach(
-    k = 1:ncol(ct), .combine = cbind,
-    .packages = c("stats", "segmented", "dplyr"), .export = c("threshold_function", "threshold_groups")
-  ) %dopar% {
-    # Return the first element of the threshold_function result
-    vector <- threshold_function(k, ct, clusters)
-    return(vector[[1]])
-  }
-  
+
+  # LOCAL CHANGE: binary calls of the penalized score ct against those thresholds (upstream reran
+  # threshold_function on ct, whose first element is the same ct > threshold binarization)
+  Group_threshold_data <- sapply(seq_len(ncol(ct)), function(k) ifelse(ct[, k] > final_threshold[k], 1, 0))
+
   
   colnames(Group_threshold_data) <- colnames(ct)
   final_threshold <- data.frame(value = final_threshold, Name = colnames(ct)) ########### . Output 1
@@ -646,25 +654,39 @@ TACIT <- function(data_expression, r, p, Signature) {
   num_cores <- min(parallelly::availableCores() - 1, length(mix_group))
   registerDoParallel(cores = num_cores)
   
+  # LOCAL CHANGE: besides the label, every mixed cell returns k and the fraction of its k nearest clean
+  # neighbours of each cell type (knn3 class probabilities): 0 for a candidate of its mix without
+  # neighbours, NA for cell types outside its mix (and all NA when not resolved by kNN, label Others)
+  knn_result <- function(ids, mem, mix_select = character(), k = NA, probs = NULL) {
+    frac <- matrix(NA_real_, nrow = length(ids), ncol = nrow(Signature), dimnames = list(NULL, Signature[, 1]))
+    frac[, mix_select] <- 0
+    if (!is.null(probs)) frac[, colnames(probs)] <- probs
+    data.frame(ID = ids, mem = mem, knn_k = k, frac, check.names = FALSE)
+  }
+
   results <- foreach(i = 1:length(mix_group), .combine = rbind, .packages = c("caret")) %dopar% {
     current_mix_type <- mix_group[i]
-    
+
     # Get all cells with this specific mixed type
     data_choose_second <- mixed_by_type[[current_mix_type]]
-    
+
     # Get potential component cell types
     mix_select <- strsplit(current_mix_type, "::")[[1]]
     mix_select <- intersect(mix_select, clean_cell_types)
-    
+
     if (length(mix_select) == 0) {
-      return(data.frame(ID = data_choose_second$ID, mem = "Others"))
+      return(knn_result(data_choose_second$ID, "Others"))
     }
     
     # Selected markers that signature for component cell type
-    anb_select <- names(which(colSums(Signature[Signature[, 1] %in% mix_select, ][-1]) > 0))
+    # LOCAL CHANGE (negative signature weights): a marker is selected when it is positive for any
+    # component cell type. Upstream sums the weights (colSums(...) > 0), which drops a marker that is
+    # +1 for one component and -1 for another (e.g. CD3E for CD4 T cell::Fibroblast) - exactly the
+    # marker that separates them. Identical to upstream when all weights are >= 0.
+    anb_select <- names(which(colSums(Signature[Signature[, 1] %in% mix_select, ][-1] > 0) > 0))
     
     if (length(anb_select) == 0) {
-      return(data.frame(ID = data_choose_second$ID, mem = "Others"))
+      return(knn_result(data_choose_second$ID, "Others"))
     }
     
     # Get the data intensity from the clean cells (all at once for these cell types)
@@ -674,7 +696,7 @@ TACIT <- function(data_expression, r, p, Signature) {
     ]
     
     if (nrow(data_clean_work) == 0) {
-      return(data.frame(ID = data_choose_second$ID, mem = "Others"))
+      return(knn_result(data_choose_second$ID, "Others"))
     } else {
       # Extract relevant data columns for mixed cells
       data_test <- data_choose_second[, c(anb_select, "ID")]
@@ -701,11 +723,15 @@ TACIT <- function(data_expression, r, p, Signature) {
       max_indices <- max.col(predictions, ties.method = "first")
       predicted_types <- colnames(predictions)[max_indices]
       
-      # Return batch results
-      return(data.frame(ID = data_test$ID, mem = predicted_types))
+      # Return batch results (LOCAL CHANGE: with k and the neighbour fractions)
+      return(knn_result(data_test$ID, predicted_types, mix_select, min(10, nrow(data_clean_work)), predictions))
     }
   }
   
+  # LOCAL CHANGE: neighbour fractions of the mixed cells kept apart (ID order), labels merged as upstream
+  knn_fractions <- results[order(results$ID), setdiff(colnames(results), "mem")]
+  results <- results[, c("ID", "mem")]
+
   # Combine results with clean cells
   data_clean_final <- rbind(data_clean_final, results)
   
@@ -722,6 +748,7 @@ TACIT <- function(data_expression, r, p, Signature) {
   attr(data_final, "marker_thresholds") <- if (exists("final_threshold2")) final_threshold2 else NULL
   attr(data_final, "positive") <- positive_cells
   attr(data_final, "mixed_ids") <- data_mixed$ID
+  attr(data_final, "knn_fractions") <- knn_fractions
 
   return(data_final)
 }

@@ -21,8 +21,8 @@ rule segmentation_cellpose:
     threads: 1
     resources:
         # both input planes, SPACEc's copies and the masks in memory
-        runtime=90,
-        mem='40G',
+        runtime=180,
+        mem='100G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

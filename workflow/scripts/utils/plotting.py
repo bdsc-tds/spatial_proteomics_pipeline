@@ -16,6 +16,38 @@ from matplotlib import font_manager
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
+# tissue (first part of the sample ID) colours: cols_tissue in analysis_repo's plotting_utils.py,
+# NSCLC from its cols_cancer_type
+tissue_cols = {"CRC": "#5696E8",
+               "DLBCL": "#AA3F5DFF",
+               "GBM": "#938467",
+               "NSCLC": "#CC79A7"}
+
+# TACIT cell types of the Xenium MM protein panel coloured as the RNA Level2 cell types (cols_level2_mm
+# in analysis_repo's plotting_utils.py; lymphoid from Level3, cols_level3), same lineage hue families when
+# there is no RNA equivalent:
+# lymphoid = blues (B / plasma indigo), myeloid = greens, stromal = browns, endothelial = gold, epithelial = purples,
+# malignant = reds
+TACIT_mm_cols = {# lymphoid (cols_level3)
+                 "CD4 T cell": "#4A6FA5",                    # T_CD4
+                 "CD8 T cell": "#2C4B70",                    # T_CD8
+                 "NK cell": "#9FB4D0",                       # NK
+                 "B cell": "#5C5A93",                        # B_cell
+                 "Plasma cell": "#38366B",                   # Plasma
+                 # myeloid
+                 "Macrophage": "#4E8C72",                    # MoMac
+                 "Dendritic cell": "#82B39A",                # DC
+                 "Neutrophil": "#2E5E4E",                    # Granulocyte
+                 # stromal
+                 "Fibroblast": "#C08A4E",                    # Fibroblast
+                 "Smooth muscle": "#8B5E3C",                 # Muscle
+                 "Endothelial": "#D9B168",                   # Endothelial
+                 # epithelial
+                 "Epithelial": "#7E6BA8",                    # Epithelial_absorptive
+                 # malignant
+                 "Malignant epithelial": "#9E4B54",          # Malignant
+                 "Cycling malignant epithelial": "#C4787E"}  # Malignant_crc
+
 
 # Plotting functions for consistency
 def set_mpl_rcparams(

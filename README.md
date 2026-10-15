@@ -142,7 +142,9 @@ Some rules run on the `gpu` partition:  (set `gpu: available: false` in the conf
 | `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Nucleus / whole-cell / cytoplasm masks for each method in `segmentation: methods`: Mesmer (deepcell, through SPACEc) and/or Cellpose 3 (through SPACEc: `nuclei` model on the nuclear signal, `cyto3` on membrane + nuclear, diameters set in µm); per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
 | `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
 
-Switches select what is built; upstream steps still run when a switched-on step needs them.
+A switched-off step is not loaded: later steps read its existing outputs as plain input files, so it
+is never re-run (Snakemake stops with a missing input error if they do not exist yet). Background
+subtraction is the exception: its switch also chooses the image every step reads.
 
 ## Extending
 

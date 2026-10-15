@@ -4,9 +4,16 @@
 # (shifted to min 0, see below), then TACIT (TACIT_function.R, next to this script) labels every cell. Writes one row per cell:
 # cell_id, cell_type ("Others" when unassigned), the first two of TACIT's p UMAP dimensions, the cell
 # types whose CTR passes its threshold and whether TACIT treated the cell as mixed. Also writes the
-# per-cell CTR scores and the inferred thresholds (all in the normalized space below).
+# per-cell CTR scores and the inferred thresholds (all in the normalized space below), and for the mixed
+# cells the cell type fractions among their k nearest clean neighbours (TACIT's kNN label is the top one).
 #
 # Signature CSV: first column cell_type, then one column per marker (weights in [0, 1], empty = 0).
+# Negative weights mark markers a cell type should NOT express (e.g. CD3E for Fibroblast): they lower
+# its CTR score in cells positive for that marker. Not part of TACIT's design; they only count as
+# "not a marker" in TACIT's subset rules (weight > 0). TACIT_function.R fits each CTR threshold on the
+# positive-weight score and applies it to the penalized score (written to --out_ctr), so negative
+# weights can only remove positive calls; see LOCAL CHANGE there.
+# The min-0 shift below means a cell at background level of an excluded marker gets ~no penalty.
 
 suppressPackageStartupMessages({
   library(optparse)
@@ -22,7 +29,8 @@ options_list <- list(
   make_option("--threads", type = "integer", default = 1, help = "cores TACIT may use"),
   make_option("--out_csv", help = "output CSV: cell_id, cell_type, UMAP1, UMAP2, positive_cell_types, mixed"),
   make_option("--out_ctr", help = "output CSV: cell_id, then the CTR score of every cell type"),
-  make_option("--out_thresholds", help = "output CSV: kind (cell_type = CTR threshold, marker = subset marker threshold), name, threshold")
+  make_option("--out_thresholds", help = "output CSV: kind (cell_type = CTR threshold, marker = subset marker threshold), name, threshold"),
+  make_option("--out_knn", help = "output CSV, one row per mixed cell: cell_id, knn_k, fraction of the k nearest clean neighbours of every cell type")
 )
 args <- parse_args(OptionParser(option_list = options_list))
 
@@ -112,3 +120,11 @@ if (!is.null(marker_thr)) {
 }
 fwrite(thresholds, args$out_thresholds)
 cat("written:", args$out_thresholds, "\n")
+
+# kNN of the mixed cells: fraction of the k nearest clean neighbours per cell type (NA = not in the cell's
+# mix of positive cell types, all NA = not resolved by kNN), cell types back to the signature names
+knn <- attr(res, "knn_fractions")
+frac_cols <- setdiff(colnames(knn), c("ID", "knn_k"))
+colnames(knn)[match(frac_cols, colnames(knn))] <- signature$cell_type[match(frac_cols, ct_ids)]
+fwrite(data.frame(cell_id = features$cell_id[knn$ID], knn[, -1], check.names = FALSE), args$out_knn)
+cat("written:", args$out_knn, "\n")
