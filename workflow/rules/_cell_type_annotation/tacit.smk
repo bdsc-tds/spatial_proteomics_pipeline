@@ -17,7 +17,7 @@ if len(TACIT_SAMPLE_IDS) < len(SAMPLE_IDS):
           f"{os.path.dirname(CONFIG_PATH)}/signatures/", file=sys.stderr)
 
 # temporary to run on one sample
-TACIT_SAMPLE_IDS=TACIT_SAMPLE_IDS[:1]
+TACIT_SAMPLE_IDS=TACIT_SAMPLE_IDS
 
 
 def tacit_xenium_dir(sample_id):
@@ -143,6 +143,8 @@ rule plot_tacit_mesmer:
         feature_tables=expand(OUT + "/segmentation/mesmer/{sample_id}/feature_table.csv", sample_id=TACIT_SAMPLE_IDS),
         cell_types=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/cell_types.csv",
                           sample_id=TACIT_SAMPLE_IDS),
+        knn_fractions=expand(OUT + "/cell_type_annotation/tacit/mesmer/{sample_id}/knn_fractions.csv",
+                             sample_id=TACIT_SAMPLE_IDS),
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/mesmer/summary/figures/cell_type_fractions.png",
@@ -165,6 +167,7 @@ rule plot_tacit_mesmer:
         --sample_ids {params.sample_ids:q} \
         --feature_tables {input.feature_tables} \
         --cell_types {input.cell_types} \
+        --knn_fractions {input.knn_fractions} \
         --signatures {input.signatures} \
         --cofactor {params.cofactor} \
         --threads {threads} \
@@ -180,6 +183,8 @@ use rule plot_tacit_mesmer as plot_tacit_cellpose with:
         feature_tables=expand(OUT + "/segmentation/cellpose/{sample_id}/feature_table.csv", sample_id=TACIT_SAMPLE_IDS),
         cell_types=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/cell_types.csv",
                           sample_id=TACIT_SAMPLE_IDS),
+        knn_fractions=expand(OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/knn_fractions.csv",
+                             sample_id=TACIT_SAMPLE_IDS),
         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/cellpose/summary/figures/cell_type_fractions.png",
@@ -196,6 +201,8 @@ use rule plot_tacit_mesmer as plot_tacit_xenium with:
                               sample_id=TACIT_XENIUM_SAMPLE_IDS),
         cell_types=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/cell_types.csv",
                           sample_id=TACIT_XENIUM_SAMPLE_IDS),
+        knn_fractions=expand(OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/knn_fractions.csv",
+                             sample_id=TACIT_XENIUM_SAMPLE_IDS),
         signatures=[tacit_signature(s) for s in TACIT_XENIUM_SAMPLE_IDS],
     output:
         fractions=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/summary/figures/cell_type_fractions.png",

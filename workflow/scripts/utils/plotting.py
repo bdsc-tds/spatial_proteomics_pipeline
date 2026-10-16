@@ -29,9 +29,7 @@ tissue_cols = {"CRC": "#5696E8",
 # lymphoid = blues (B / plasma indigo), myeloid = greens, stromal = browns, endothelial = gold, epithelial = purples,
 # malignant = reds
 TACIT_mm_cols = {# lymphoid (cols_level3)
-                 "CD4 T cell": "#4A6FA5",                    # T_CD4
-                 "CD8 T cell": "#2C4B70",                    # T_CD8
-                 "NK cell": "#9FB4D0",                       # NK
+                 "T/NK cell": "#4A6FA5",                     # T_CD4, T_CD8, NK
                  "B cell": "#5C5A93",                        # B_cell
                  "Plasma cell": "#38366B",                   # Plasma
                  # myeloid

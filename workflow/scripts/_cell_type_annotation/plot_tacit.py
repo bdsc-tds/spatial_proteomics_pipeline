@@ -1,7 +1,7 @@
 """Plot the TACIT cell types of one segmentation method over all samples.
 
 Reads, per sample (same order in every list): the feature table of quantify_cells, the TACIT labels
-of run_tacit.R and the signature CSV of the sample's panel. The tissue of a sample is the first part
+and kNN neighbour fractions of the mixed cells of run_tacit.R and the signature CSV of the sample's panel. The tissue of a sample is the first part
 of its sample ID (tissue/panel/donor/sample).
 Writes, over all samples (in the folder of --out_fractions):
   - a stacked bar plot of the fraction of each cell type per sample, one facet per tissue
@@ -9,6 +9,9 @@ Writes, over all samples (in the folder of --out_fractions):
     per sample, one facet per tissue
   - a boxplot of the fraction of the cells of each cell type that are unique, i.e. not reassigned from
     a mixed microcluster, across samples (one point per sample, coloured by tissue)
+  - a boxplot of the fraction of the cells of each cell type that are pure, i.e. positive for their final
+    cell type only with the group 4 thresholds of run_tacit.R, across samples, below a smaller bar of the
+    number of pure cells per cell type (all samples summed)
   - per signature (panel), a heatmap of the weight of every marker per cell type, markers that define a
     cell type and the other markers in separate blocks
   - a boxplot of the fraction of the mixed cells of a sample per pair of positive cell types (the
@@ -19,15 +22,20 @@ Writes, per sample (in the folder of its --out_sample_fractions):
   - a bar plot of the fraction of each cell type
   - a bar plot of the fraction of unique, mixed and unassigned cells
   - a bar plot of the fraction of the cells of each cell type that are unique
+  - a bar plot of the fraction of the cells of each cell type that are pure (group 4), next to a smaller
+    bar plot of the number of pure cells
   - a bar plot of the number of mixed cells per pair of positive cell types (the N_PAIRS most frequent
     pairs of the sample, log scale), mixed cells positive for three or more cell types in one bar,
     below a stacked bar of the final TACIT cell types of the mixed cells of each pair (unit scaled)
   - the same for the mixed cells positive for three or more cell types, per combination of positive cell
     types (the N_PAIRS most frequent combinations of the sample)
-  - a heatmap of the mean normalized intensity (arcsinh(x / cofactor), z-score within the sample) of
+  - a heatmap of the mean normalized intensity (arcsinh(x / cofactor), scaled to 0-1 within the sample as in run_tacit.R) of
     every signature marker per cell type, markers split (and clustered separately) by whether their
     signature weight defines a cell type
-  - the same heatmap with the unique cells only (z-scores still over all cells of the sample)
+  - the same heatmap with the unique cells only (scaling still over all cells of the sample)
+  - for the mixed cells resolved by TACIT's kNN, a violin + boxplot of the fraction of their k nearest clean
+    neighbours of every other cell type (cell types outside a cell's mix count as 0), one facet per final cell type
+  - a boxplot of the fraction of those neighbours of the final cell type, per final cell type
   - the UMAP of preprocess_protein (same cofactor) on the signature markers, coloured by cell type
 """
 
@@ -41,6 +49,7 @@ def parse_args():
     parser.add_argument("--sample_ids", nargs="+", required=True, help="tissue/panel/donor/sample of every sample")
     parser.add_argument("--feature_tables", nargs="+", required=True, help="quantify_cells feature tables")
     parser.add_argument("--cell_types", nargs="+", required=True, help="run_tacit.R outputs")
+    parser.add_argument("--knn_fractions", nargs="+", required=True, help="run_tacit.R kNN fractions of the mixed cells")
     parser.add_argument("--signatures", nargs="+", required=True, help="signature CSV of each sample's panel")
     parser.add_argument("--cofactor", type=float, required=True, help="arcsinh cofactor")
     parser.add_argument("--threads", type=int, default=1)
@@ -52,7 +61,7 @@ def parse_args():
 
     # every per-sample list must follow --sample_ids
     n = len(args.sample_ids)
-    for name in ["feature_tables", "cell_types", "signatures", "out_sample_fractions"]:
+    for name in ["feature_tables", "cell_types", "knn_fractions", "signatures", "out_sample_fractions"]:
         if len(getattr(args, name)) != n:
             raise ValueError(f"--{name}: {len(getattr(args, name))} values for {n} samples")
     return args
@@ -68,8 +77,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from plotnine import (aes, coord_flip, element_rect, element_text, facet_grid, geom_boxplot, geom_col, geom_jitter,
-                      ggplot, guide_legend, guides, labs, scale_color_manual, scale_fill_manual, scale_x_discrete,
+from plotnine import (aes, coord_flip, element_rect, element_text, facet_grid, facet_wrap, geom_boxplot, geom_col,
+                      geom_jitter, geom_violin, ggplot, guide_legend, guides, labs, scale_color_manual, scale_fill_manual, scale_x_discrete,
                       scale_y_continuous, theme, theme_classic)
 
 # PyComplexHeatmap still calls the removed matplotlib.cm.get_cmap in some versions
@@ -92,6 +101,8 @@ ASSIGNMENT_COLORS = {"unique": "#4A6FA5", "mixed": "#C08A4E", "unassigned": OTHE
 # mixed cells positive for three or more cell types, one bar / box in the pairs plots
 MULTI = "3+ cell types"
 PAIR_COLORS = {"2 cell types": "#BFBFBF", MULTI: "#5F5F5F"}
+# percentiles of every marker scaled to 0 and 1 (clipped) in the heatmaps, as SCALE_QUANTILES in run_tacit.R
+SCALE_QUANTILES = (0, 0.999)
 # most frequent cell type pairs shown in the pairs plots
 N_PAIRS = 20
 
@@ -127,6 +138,9 @@ def all_labels(labels, ct_order):
     df["combination"] = [" + ".join(sorted(p, key=lambda ct: rank.get(ct, len(rank)))) if m else None
                          for p, m in zip(positives, df["mixed"].astype(bool))]
     df["pair"] = [(c if len(p) == 2 else MULTI) if c is not None else None for c, p in zip(df["combination"], positives)]
+
+    # pure cells: positive for their final cell type only with the group 4 thresholds
+    df["pure"] = df["positive_cell_types_group4"].fillna("").eq(df["cell_type"]) & (df["cell_type"] != OTHERS)
     return df
 
 
@@ -221,6 +235,84 @@ def summary_unique(df, ct_order, palette, out):
     p = boxplot_across_samples(frac, "cell_type", "cell_type", palette, "TACIT cell type", tissue_palette(df),
                                "fraction of unique cells (not mixed)")
     savefig_plotnine(p, None, out)
+
+
+def pure_per_cell_type(cells, ct_order):
+    """Pure cells (group 4) and their fraction of the cells of each final cell type (Others left out),
+    per sample, cell types in signature order."""
+    assigned = cells[cells["cell_type"] != OTHERS]
+    pure = (assigned.groupby(["tissue", "sample_id", "cell_type"])["pure"].agg(["sum", "mean"])
+            .rename(columns={"sum": "pure_cells", "mean": "fraction"}).reset_index())
+    present = [ct for ct in ct_order if ct in set(pure["cell_type"])]
+    pure["cell_type"] = pd.Categorical(pure["cell_type"], categories=present)
+    return pure, present
+
+
+def summary_pure(df, ct_order, palette, out):
+    """Fraction of the cells of each final cell type that are pure (group 4) across samples, below a
+    smaller bar of the number of pure cells per cell type summed over all samples (log scale)."""
+    pure, present = pure_per_cell_type(df, ct_order)
+    x = np.arange(len(present))
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, sharex=True, figsize=(0.45 * len(present) + 4, 6),
+                                         gridspec_kw={"height_ratios": [1, 3], "hspace": 0.08})
+
+    # pure cells per cell type over all samples, count above each bar
+    totals = pure.groupby("cell_type", observed=False)["pure_cells"].sum().reindex(present)
+    ax_top.bar(x, totals.clip(lower=0.8), width=0.7, color=[palette[ct] for ct in present])
+    ax_top.set_yscale("log")
+    ax_top.set_ylim(0.8, max(totals.max(), 1) * 300)
+    for xi, v in zip(x, totals):
+        ax_top.text(xi, max(v, 0.8) * 1.15, str(int(v)), ha="center", va="bottom", rotation=90, fontsize=9)
+    ax_top.set_ylabel("pure cells\n(log scale)", fontsize=12)
+    ax_top.tick_params(axis="x", length=0)
+
+    # one box per cell type, filled by its colour
+    boxes = ax_bot.boxplot([pure.loc[pure["cell_type"] == ct, "fraction"] for ct in present], positions=x,
+                           widths=0.7, patch_artist=True, showfliers=False, medianprops={"color": "black"})
+    for box, ct in zip(boxes["boxes"], present):
+        box.set(facecolor=palette[ct], edgecolor="black")
+    # one jittered point per sample, coloured by tissue
+    rng = np.random.default_rng(0)
+    for tissue, color in tissue_palette(df).items():
+        sub = pure[pure["tissue"] == tissue]
+        ax_bot.scatter(sub["cell_type"].cat.codes + rng.uniform(-0.2, 0.2, len(sub)), sub["fraction"], s=12,
+                       color=color, alpha=0.8, linewidths=0, zorder=3, label=tissue)
+    ax_bot.set_ylim(0, 1)
+    ax_bot.set_ylabel("fraction of pure cells\n(group 4 thresholds)", fontsize=12)
+    ax_bot.set_xticks(x, present, rotation=45, ha="right", rotation_mode="anchor")
+    ax_bot.legend(title="tissue", bbox_to_anchor=(1.01, 1), loc="upper left", frameon=False, fontsize=10,
+                  title_fontsize=11, markerscale=2)
+    savefig(None, out)
+
+
+def sample_pure(sub, ct_order, palette, title, out):
+    """Fraction of the cells of each final cell type of one sample that are pure (group 4), next to a
+    smaller bar of the number of pure cells (log scale)."""
+    pure, present = pure_per_cell_type(sub, ct_order)
+    pure = pure.set_index("cell_type").reindex(present)
+    # cell types top to bottom in signature order
+    y = np.arange(len(present))[::-1]
+    colors = [palette[ct] for ct in present]
+    fig, (ax_frac, ax_n) = plt.subplots(1, 2, sharey=True, figsize=(7, 0.25 * len(present) + 1.5),
+                                        gridspec_kw={"width_ratios": [3, 1], "wspace": 0.08})
+
+    # fraction of pure cells per cell type
+    ax_frac.barh(y, pure["fraction"], height=0.8, color=colors)
+    ax_frac.set_xlim(0, 1)
+    ax_frac.set_yticks(y, present)
+    ax_frac.set_xlabel("fraction of pure cells\n(group 4 thresholds)")
+    ax_frac.set_title(title)
+
+    # pure cells per cell type, count right of each bar
+    counts = pure["pure_cells"]
+    ax_n.barh(y, counts.clip(lower=0.8), height=0.8, color=colors)
+    ax_n.set_xscale("log")
+    ax_n.set_xlim(0.8, max(counts.max(), 1) * 30)
+    for yi, v in zip(y, counts):
+        ax_n.text(max(v, 0.8) * 1.15, yi, str(int(v)), ha="left", va="center", fontsize=8)
+    ax_n.set_xlabel("pure cells\n(log scale)")
+    ax_n.tick_params(axis="y", length=0)
+    savefig(None, out)
 
 
 def pair_labels(mixed, col, order, ct_order):
@@ -378,24 +470,109 @@ def sample_plots(sub, ct_order, palette, out_fractions, out_mixed, out_unique, o
                         "no mixed cells positive for 3+ cell types", out_multi)
 
 
+def empty_figure(text, title, out):
+    """Placeholder figure with a centered message."""
+    plt.figure(figsize=(6, 2))
+    plt.text(0.5, 0.5, text, ha="center", va="center", fontsize=13)
+    plt.axis("off")
+    plt.title(title)
+    savefig(None, out)
+
+
+def knn_long(knn, labels, ct_order):
+    """Neighbour fractions of the mixed cells resolved by kNN in long format: cell_id, final cell_type,
+    neighbour cell type and fraction (cell types outside the cell's mix as 0), both in signature order."""
+    # final label of every mixed cell; unresolved cells (label Others, all fractions NA) left out
+    frac_cols = [c for c in knn.columns if c not in ("cell_id", "knn_k")]
+    df = knn.merge(labels[["cell_id", "cell_type"]], on="cell_id", how="left", validate="1:1")
+    df = df[df["cell_type"] != OTHERS]
+
+    # one row per cell and neighbour cell type, NA (not in the mix) = no neighbours of that type
+    long = df.melt(id_vars=["cell_id", "cell_type"], value_vars=frac_cols, var_name="neighbour", value_name="fraction")
+    long["fraction"] = long["fraction"].fillna(0)
+
+    # final and neighbour cell types in signature order
+    finals = [ct for ct in ct_order if ct in set(long["cell_type"])]
+    long["cell_type"] = pd.Categorical(long["cell_type"], categories=finals)
+    long["neighbour"] = pd.Categorical(long["neighbour"], categories=[ct for ct in ct_order if ct in frac_cols])
+    return long
+
+
+def plot_knn_other(long, palette, title, out):
+    """Violin + boxplot of the fraction of the k nearest clean neighbours of every cell type other than the
+    final one, one point per mixed cell, one facet per final cell type."""
+    other = long[long["neighbour"].astype(str) != long["cell_type"].astype(str)]
+    if other.empty:
+        empty_figure("no mixed cells resolved by kNN", title, out)
+        return
+
+    # facets on a grid of up to 4 columns, each without its own final cell type
+    n_facets = other["cell_type"].nunique()
+    ncol = min(4, n_facets)
+    nrow = -(-n_facets // ncol)
+    p = (
+        ggplot(other, aes("neighbour", "fraction", fill="neighbour"))
+        + geom_violin(scale="width", width=0.9, size=0.2, show_legend=False)
+        + geom_boxplot(width=0.15, outlier_shape="", fill="white", size=0.3)
+        + facet_wrap("cell_type", ncol=ncol, scales="free_x")
+        + scale_fill_manual(values=palette)
+        + labs(x="neighbour cell type", y="fraction of k nearest clean neighbours",
+               title=f"{title}: mixed cells per final TACIT cell type")
+        + theme_classic()
+        + theme(panel_border=element_rect(fill=None, color="black"),
+                text=element_text(font="Helvetica"),
+                axis_text_x=element_text(rotation=45, ha="right"),
+                figure_size=(4 * ncol, 3.5 * nrow + 1))
+        + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))
+    )
+    savefig_plotnine(p, None, out)
+
+
+def plot_knn_assigned(long, palette, title, out):
+    """Boxplot of the fraction of the k nearest clean neighbours of the final cell type, per final cell type."""
+    own = long[long["neighbour"].astype(str) == long["cell_type"].astype(str)]
+    if own.empty:
+        empty_figure("no mixed cells resolved by kNN", title, out)
+        return
+
+    p = (
+        ggplot(own, aes("cell_type", "fraction", fill="cell_type"))
+        + geom_boxplot(width=0.7, outlier_size=0.5, show_legend=False)
+        + scale_fill_manual(values=palette)
+        + labs(x="final TACIT cell type", y="fraction of k nearest clean neighbours\nof the final cell type",
+               title=f"{title}: mixed cells")
+        + theme_classic()
+        + theme(panel_border=element_rect(fill=None, color="black"),
+                text=element_text(font="Helvetica"),
+                axis_text_x=element_text(rotation=45, ha="right"),
+                figure_size=(0.45 * own["cell_type"].nunique() + 2, 5))
+        + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))
+    )
+    savefig_plotnine(p, None, out)
+
+
 def normalize(features, markers, cofactor):
-    """arcsinh(x / cofactor) and z-score per marker within the sample, as run_tacit.R (without its shift to min 0)."""
+    """arcsinh(x / cofactor) scaled to 0-1 per marker between its SCALE_QUANTILES within the sample (clipped),
+    as run_tacit.R; a marker of range 0 is 0."""
     norm = np.arcsinh(features[markers] / cofactor)
-    return (norm - norm.mean()) / norm.std(ddof=1)
+    # 0-1 between the two percentiles, clipped
+    lo, hi = norm.quantile(SCALE_QUANTILES[0]), norm.quantile(SCALE_QUANTILES[1])
+    scaled = ((norm - lo) / (hi - lo)).clip(0, 1)
+    return scaled.replace([np.inf, -np.inf], np.nan).fillna(0)
 
 
 def plot_heatmap(features, cell_types, signature, cofactor, ct_order, palette, title, out, keep=None):
     """Mean normalized intensity of every signature marker per cell type, cell type colours on the left,
     cell numbers on the right; markers split (and clustered separately) by whether they define a cell type
     in the signature (a non-empty, non-zero weight), shown as a column annotation. With keep (boolean mask
-    of the cells), only those cells are averaged, z-scores still over all cells of the sample."""
+    of the cells), only those cells are averaged, scaling still over all cells of the sample."""
     markers = list(signature.columns)
-    # z-score over all cells, then only the kept cells
+    # 0-1 scaling over all cells, then only the kept cells
     norm = normalize(features, markers, cofactor)
     if keep is not None:
         keep = np.asarray(keep, dtype=bool)
         norm, cell_types = norm[keep], cell_types[keep]
-    # mean z-score per cell type and marker, rows in signature order
+    # mean scaled intensity per cell type and marker, rows in signature order
     means = norm.groupby(cell_types.to_numpy()).mean()
     means = means.loc[[ct for ct in ct_order if ct in means.index]]
 
@@ -421,8 +598,8 @@ def plot_heatmap(features, cell_types, signature, cofactor, ct_order, palette, t
                                col_split=split, col_split_order=["yes", "no"], col_split_gap=1.5,
                                top_annotation=top, left_annotation=left, right_annotation=right,
                                show_rownames=True, show_colnames=True,
-                               row_names_side="left", cmap="RdBu_r", center=0, vmin=-2, vmax=2,
-                               label="mean z-score", legend_kws={"extend": "neither"}, legend_hpad=3,
+                               row_names_side="left", cmap=zero_white_cmap(0), vmin=0, vmax=1,
+                               label="mean scaled intensity", legend_kws={"extend": "neither"}, legend_hpad=3,
                                xticklabels_kws={"labelrotation": 45},
                                xlabel="Protein", ylabel="TACIT automated cell types", ylabel_kws={"labelpad": 110},
                                verbose=0)
@@ -435,7 +612,7 @@ def plot_heatmap(features, cell_types, signature, cofactor, ct_order, palette, t
     # colorbar title centered above the bar instead of along its side
     cbar = next(c for c in cm.cbars if isinstance(c, matplotlib.colorbar.Colorbar))
     cbar.set_label("")
-    cbar.ax.set_title("mean z-score", loc="center", fontsize=13, pad=8)
+    cbar.ax.set_title("mean scaled\nintensity", loc="center", fontsize=13, pad=8)
     # colorbar 0.8 inch right of the cell number bars, room for its centered title (PyComplexHeatmap leaves more)
     bars = cm.right_annotation.axes[0, -1].get_position()
     pos = cbar.ax.get_position()
@@ -578,6 +755,7 @@ def main(args):
     summary_fractions(df, ct_order, palette, args.out_fractions)
     summary_mixed(df, os.path.join(summary_dir, "mixed_fraction.png"))
     summary_unique(df, ct_order, palette, os.path.join(summary_dir, "unique_fraction_per_cell_type.png"))
+    summary_pure(df, ct_order, palette, os.path.join(summary_dir, "pure_fraction_per_cell_type.png"))
     summary_pairs(df, ct_order, palette, os.path.join(summary_dir, "mixed_cell_type_pairs.png"))
 
     # weights of every distinct signature (signature_{panel}.png)
@@ -596,6 +774,14 @@ def main(args):
                      os.path.join(sample_dir, "unique_fraction_per_cell_type.png"),
                      os.path.join(sample_dir, "mixed_cell_type_pairs.png"),
                      os.path.join(sample_dir, "mixed_cell_type_3plus.png"))
+        sample_pure(df[df["sample_id"] == sample_id], ct_order, palette, sample_label(sample_id),
+                    os.path.join(sample_dir, "pure_fraction_per_cell_type.png"))
+
+        # kNN neighbour fractions of the mixed cells: other cell types per final cell type, and the final one
+        long = knn_long(pd.read_csv(args.knn_fractions[i]), labels[sample_id], ct_order)
+        plot_knn_other(long, palette, sample_label(sample_id), os.path.join(sample_dir, "knn_neighbour_fractions.png"))
+        plot_knn_assigned(long, palette, sample_label(sample_id),
+                          os.path.join(sample_dir, "knn_assigned_fraction.png"))
 
         features = pd.read_csv(args.feature_tables[i])
         markers = list(signatures[i].columns)

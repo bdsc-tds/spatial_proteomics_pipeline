@@ -2,7 +2,8 @@
 # https://github.com/huynhkl953/TACIT/blob/faf623ad4042c5eb5c6cbee29dd39381a2f31742/R/TACIT_function.R
 # (commit faf623a, 2025-09-02): the GitHub package does not install (huynhkl953/TACIT issue #5).
 # Local changes: the output attributes at the end of TACIT() (incl. the kNN neighbour fractions of the
-# mixed cells, knn_result in the kNN step), and two for negative signature weights
+# mixed cells, knn_result in the kNN step), the group 4 CTR threshold (start of the top breakpoint
+# segment, returned next to the optimal one, not used for the labels), and two for negative signature weights
 # (marked LOCAL CHANGE): CTR thresholds fitted on the positive-weight score and applied to the
 # penalized score, and the kNN marker selection of mixed cells (anb_select) so that negative weights
 # do not cancel markers.
@@ -215,6 +216,7 @@ threshold_function <- function(k, data_anb, clusters) {
   
   if (sum(data_median$median_value) == 0) {
     threshold_point_final <- max(data_ordered[, name]) # if all median louvain = 0, we do not have positive cells (threshold at max)
+    threshold_group4 <- threshold_point_final
   } else {
     x <- 1:nrow(data_median)
     y <- data_median$median_value
@@ -313,13 +315,17 @@ threshold_function <- function(k, data_anb, clusters) {
       low_low[g] <- length(low_data[which(low_data < cut_seq[g] | low_data == cut_seq[g])]) / length(low_data)
     }
     threshold_point_final <- cut_seq[which.min(low_high + high_low)]
+
+    # LOCAL CHANGE: start of group 4 (lowest cluster median of the top breakpoint segment), returned
+    # next to the optimal threshold
+    threshold_group4 <- min(new_data_anb$median_value[new_data_anb$Group_expression == 4])
   }
-  
+
   ## create matrix binarization
   Group_Threshold_new <- ifelse(as.numeric(t(data_intensity_cluster[, name])) > threshold_point_final, 1, 0)
-  
-  
-  return(list(Group_Threshold_new, threshold_point_final))
+
+
+  return(list(Group_Threshold_new, threshold_point_final, threshold_group4))
 }
 
 TACIT <- function(data_expression, r, p, Signature) {
@@ -455,22 +461,24 @@ TACIT <- function(data_expression, r, p, Signature) {
   cat("==== Phase 1: Processing Main Data Columns ====\n")
   cat("Processing", ncol(ct), "columns in parallel...\n")
   final_threshold <- foreach(
-    k = 1:ncol(ct), .combine = c,
+    k = 1:ncol(ct), .combine = rbind,
     .packages = c("stats", "segmented", "dplyr"), .export = c("threshold_function", "threshold_groups")
   ) %dopar% {
     # Return the second element of the threshold_function result
-    # LOCAL CHANGE: thresholds fitted on the positive-weight score (ct_pos, see above)
+    # LOCAL CHANGE: thresholds fitted on the positive-weight score (ct_pos, see above), plus the
+    # group 4 threshold (third element)
     vector <- threshold_function(k, ct_pos, clusters)
-    return(vector[[2]])
+    return(c(vector[[2]], vector[[3]]))
   }
+  final_threshold <- matrix(final_threshold, ncol = 2)
 
   # LOCAL CHANGE: binary calls of the penalized score ct against those thresholds (upstream reran
   # threshold_function on ct, whose first element is the same ct > threshold binarization)
-  Group_threshold_data <- sapply(seq_len(ncol(ct)), function(k) ifelse(ct[, k] > final_threshold[k], 1, 0))
+  Group_threshold_data <- sapply(seq_len(ncol(ct)), function(k) ifelse(ct[, k] > final_threshold[k, 1], 1, 0))
 
-  
+
   colnames(Group_threshold_data) <- colnames(ct)
-  final_threshold <- data.frame(value = final_threshold, Name = colnames(ct)) ########### . Output 1
+  final_threshold <- data.frame(value = final_threshold[, 1], group4 = final_threshold[, 2], Name = colnames(ct)) ########### . Output 1
   
   # Conditionally handle marker subset processing
   if (length(marker_subset) > 1) {
@@ -651,7 +659,7 @@ TACIT <- function(data_expression, r, p, Signature) {
     signature_markers[[ct]] <- names(which(colSums(Signature[Signature[, 1] == ct, ][-1]) > 0))
   }
   
-  num_cores <- min(parallelly::availableCores() - 1, length(mix_group))
+  num_cores <- max(1, min(parallelly::availableCores() - 1, length(mix_group)))
   registerDoParallel(cores = num_cores)
   
   # LOCAL CHANGE: besides the label, every mixed cell returns k and the fraction of its k nearest clean
@@ -661,10 +669,14 @@ TACIT <- function(data_expression, r, p, Signature) {
     frac <- matrix(NA_real_, nrow = length(ids), ncol = nrow(Signature), dimnames = list(NULL, Signature[, 1]))
     frac[, mix_select] <- 0
     if (!is.null(probs)) frac[, colnames(probs)] <- probs
-    data.frame(ID = ids, mem = mem, knn_k = k, frac, check.names = FALSE)
+    data.frame(ID = ids, mem = mem, knn_k = rep(k, length(ids)), frac, check.names = FALSE)
   }
 
-  results <- foreach(i = 1:length(mix_group), .combine = rbind, .packages = c("caret")) %dopar% {
+  # LOCAL CHANGE: no mixed cells -> empty kNN result (upstream loops over 1:0 and fails)
+  if (length(mix_group) == 0) {
+    results <- knn_result(integer(0), character(0))
+  } else {
+  results <- foreach(i = seq_along(mix_group), .combine = rbind, .packages = c("caret")) %dopar% {
     current_mix_type <- mix_group[i]
 
     # Get all cells with this specific mixed type
@@ -727,7 +739,8 @@ TACIT <- function(data_expression, r, p, Signature) {
       return(knn_result(data_test$ID, predicted_types, mix_select, min(10, nrow(data_clean_work)), predictions))
     }
   }
-  
+  }
+
   # LOCAL CHANGE: neighbour fractions of the mixed cells kept apart (ID order), labels merged as upstream
   knn_fractions <- results[order(results$ID), setdiff(colnames(results), "mem")]
   results <- results[, c("ID", "mem")]
