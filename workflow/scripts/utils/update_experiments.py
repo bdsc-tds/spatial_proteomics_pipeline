@@ -32,7 +32,7 @@ from experiments import (
     donor_samples,
     PANEL_TEMPLATE,
     get_panel_exts,
-    get_panel_globs,
+    image_matches,
     index_xenium_runs,
     iter_samples,
     layer_items,
@@ -42,28 +42,6 @@ from experiments import (
 )
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="pipeline config.yml; its `experiments` key locates experiments.yml")
-    parser.add_argument("--base_path", help="raw image directory; only used when experiments.yml has no _base_path yet")
-    parser.add_argument("--xenium_base_path", help="raw Xenium directory; only used when experiments.yml has no _xenium_base_path yet")
-    parser.add_argument("--image_ext", help=f"image extension for panels not yet in experiments.yml (default: any of {', '.join(DEFAULT_IMAGE_EXTS)})")
-    parser.add_argument("--panel_template", help="existing panel whose metadata is copied into new panels")
-    parser.add_argument("--prune", action="store_true", help="remove samples whose raw folder no longer holds an image")
-    parser.add_argument("--dry-run", action="store_true", help="print the resulting changes without writing")
-    return parser.parse_args()
-
-
-def new_yaml():
-    # round-trip loader that keeps quotes and comments, with the indentation used in experiments.yml
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    yaml.indent(mapping=2, sequence=4, offset=2)
-    # wide enough that long lines are never wrapped
-    yaml.width = 4096
-    return yaml
-
-
 def dump(yaml, data):
     # serialize to a string (used both for writing and for diffing old vs. new)
     buf = io.StringIO()
@@ -71,43 +49,31 @@ def dump(yaml, data):
     return buf.getvalue()
 
 
-def experiments_path_from_config(yaml, config_path):
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--config", required=True, help="pipeline config.yml; its `experiments` key locates experiments.yml")
+    parser.add_argument("--base_path", help="raw image directory; only used when experiments.yml has no _base_path yet")
+    parser.add_argument("--xenium_base_path", help="raw Xenium directory; only used when experiments.yml has no _xenium_base_path yet")
+    parser.add_argument("--image_ext", help=f"_image_ext for panels not yet in experiments.yml (default: the first of {', '.join(DEFAULT_IMAGE_EXTS)} finding an image)")
+    parser.add_argument("--panel_template", help="existing panel whose metadata is copied into new panels")
+    parser.add_argument("--prune", action="store_true", help="remove samples whose raw folder no longer holds an image")
+    parser.add_argument("--dry-run", action="store_true", help="print the resulting changes without writing")
+    args = parser.parse_args()
+
+    # round-trip loader that keeps quotes and comments, with the indentation used in experiments.yml;
+    # wide enough that long lines are never wrapped
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.indent(mapping=2, sequence=4, offset=2)
+    yaml.width = 4096
+
     # read the pipeline config and check it points to an experiments sheet
-    with open(config_path) as f:
+    with open(args.config) as f:
         cfg = yaml.load(f)
     if not cfg or not cfg.get("experiments"):
-        sys.exit(f"{config_path}: no `experiments` entry")
+        sys.exit(f"{args.config}: no `experiments` entry")
     # relative to the real config file, so it also works through the config/config.yml symlink
-    return resolve_path(cfg["experiments"], os.path.realpath(config_path))
-
-
-def find_panel_template(experiments, panel_name):
-    # copy the _-prefixed metadata keys (not the donors) of the first panel with this name, in any tissue
-    for _, tissue_node in layer_items(experiments):
-        for panel, panel_node in layer_items(tissue_node):
-            if panel == panel_name:
-                return CommentedMap((k, copy.deepcopy(v)) for k, v in panel_node.items() if str(k).startswith("_"))
-    sys.exit(f"--panel_template {panel_name}: panel not found in experiments.yml")
-
-
-def flow_list(items):
-    """List dumped on one line: [a, b]."""
-    seq = CommentedSeq(items)
-    seq.fa.set_flow_style()
-    return seq
-
-
-def child(node, key, factory=CommentedMap):
-    # get node[key], creating an empty entry first if it is missing or null
-    if node.get(key) is None:
-        node[key] = factory()
-    return node[key]
-
-
-def main():
-    args = parse_args()
-    yaml = new_yaml()
-    experiments_path = experiments_path_from_config(yaml, args.config)
+    experiments_path = resolve_path(cfg["experiments"], os.path.realpath(args.config))
 
     # load the existing sheet, or start a new one from the CLI paths
     if os.path.exists(experiments_path):
@@ -128,32 +94,43 @@ def main():
     # scan raw sample folders
     default_exts = [args.image_ext] if args.image_ext else DEFAULT_IMAGE_EXTS
     panel_exts = get_panel_exts(experiments)
-    scanned = scan_raw_samples(base_path, panel_exts, default_exts, get_panel_globs(experiments))
+    scanned = scan_raw_samples(base_path, panel_exts, default_exts)
     # split folders by number of images found: exactly one (usable), none, several (ambiguous, skipped)
     with_image = {k: v[0] for k, v in scanned.items() if len(v) == 1}
     no_image = [k for k, v in scanned.items() if not v]
     multi_image = {k: v for k, v in scanned.items() if len(v) > 1}
 
-    # new panels start from a template metadata block
-    template = find_panel_template(experiments, args.panel_template) if args.panel_template else None
+    # new panels start from a template metadata block: the _-prefixed keys (not the donors) of the
+    # first panel named --panel_template, in any tissue
+    template = None
+    if args.panel_template:
+        template = next((CommentedMap((k, copy.deepcopy(v)) for k, v in panel_node.items() if str(k).startswith("_"))
+                         for _, tissue_node in layer_items(experiments)
+                         for panel, panel_node in layer_items(tissue_node) if panel == args.panel_template), None)
+        if template is None:
+            sys.exit(f"--panel_template {args.panel_template}: panel not found in experiments.yml")
 
     # add samples missing from the sheet, as a one-line [sample, ...] list per donor
     added = []
     for (tissue, panel, donor, sample), image in with_image.items():
-        tissue_node = child(experiments, tissue)
+        # tissue entry, created if missing or null
+        if experiments.get(tissue) is None:
+            experiments[tissue] = CommentedMap()
+        tissue_node = experiments[tissue]
         # first sample of a panel in this tissue: create the panel with template metadata
         if tissue_node.get(panel) is None:
             panel_node = copy.deepcopy(template) if template else CommentedMap(PANEL_TEMPLATE)
-            # the extension always comes from the image actually found, not from the template panel,
-            # out of the extensions the scan used for this panel name (it may already be declared by
-            # the same panel in another tissue)
+            # _image_ext always comes from the image actually found, not from the template panel: the
+            # first of the values the scan tried for this panel name that matches it (the panel may
+            # already be declared in another tissue)
             scan_exts = [panel_exts[panel]] if panel in panel_exts else default_exts
-            panel_node["_image_ext"] = max((e for e in scan_exts if image.endswith("." + e)), key=len)
+            panel_node["_image_ext"] = next(e for e in scan_exts if image_matches(image, e))
             tissue_node[panel] = panel_node
         panel_node = tissue_node[panel]
         # normalize the donor entry (missing, or a single sample string) into a one-line list
         if not isinstance(panel_node.get(donor), list):
-            panel_node[donor] = flow_list(donor_samples(panel_node.get(donor)))
+            panel_node[donor] = CommentedSeq(donor_samples(panel_node.get(donor)))
+            panel_node[donor].fa.set_flow_style()
         # append the sample only if not already listed
         if sample not in panel_node[donor]:
             panel_node[donor].append(sample)

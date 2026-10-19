@@ -3,11 +3,11 @@
 Layout (as in xenium_analysis_pipeline): tissue -> panel -> donor -> [samples]. Keys starting with
 "_" are metadata, not layers:
   - top level:   _base_path (raw proteomics images), _xenium_base_path (optional, raw Xenium runs)
-  - panel level: technology-specific settings, see PANEL_TEMPLATE (required) and PANEL_OPTIONAL
+  - panel level: technology-specific settings, see PANEL_TEMPLATE
   - donor:       list of sample names
 
 Nothing per sample is stored; both paths are derived when the sheet is read:
-  - image:  the single *.{_image_ext} file matching {_image_glob} (default "*", i.e. directly) in
+  - image:  the single file matching _image_ext (see find_images) in
             {_base_path}/{tissue}/{panel}/{donor}/{sample}/
   - xenium: the Xenium run {_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/ (layout of
             xenium_analysis_pipeline) whose donor name contains the proteomics donor and whose
@@ -25,25 +25,22 @@ import sys
 # panel-level metadata written for every new panel; None values must be filled in by hand
 PANEL_TEMPLATE = {
     "_technology": None,  # e.g. codex, comet
-    "_image_ext": None,  # image extension inside each sample folder, e.g. qptiff, ome.tiff
+    # end of the image path inside each sample folder: an extension (qptiff, ome.tiff), optionally
+    # behind a subfolder, or a full file name (morphology_focus/ch0000_dapi.ome.tif for Xenium)
+    "_image_ext": None,
     "_pixel_size_um": None,  # fallback when the image metadata carries no pixel size
     "_nuclear_channels": None,  # channels combined (max) into the nuclear signal, usually [DAPI]; the first is used for alignment
     "_membrane_channels": None,  # channels combined (max) into the membrane/cytoplasm signal for Mesmer
     "_background_subtraction": False,  # run background subtraction for this panel (COMET only)
 }
 
-# panel-level metadata that may be left out, with its default
-PANEL_OPTIONAL = {
-    # image location relative to the sample folder, as a glob; e.g. morphology_focus/ch0000_*.ome.tif
-    # for a Xenium output folder, whose first morphology_focus file opens the whole multi-file image
-    "_image_glob": "*",
-}
-
 # panel metadata holding channel lists (a single channel may be written as a plain string)
 CHANNEL_LIST_KEYS = ("nuclear_channels", "membrane_channels")
 
-# extensions tried for panels that are not in experiments.yml yet
-DEFAULT_IMAGE_EXTS = ("qptiff", "ome.tiff", "ome.tif")
+# _image_ext values tried, in order, for panels that are not in experiments.yml yet; the first one
+# finding an image wins. Xenium comes before ome.tif: a Xenium output folder also holds the 3D
+# morphology.ome.tif, while its first morphology_focus file opens the whole multi-file image
+DEFAULT_IMAGE_EXTS = ("morphology_focus/ch0000_dapi.ome.tif", "qptiff", "ome.tiff", "ome.tif")
 
 
 def is_meta(key):
@@ -119,21 +116,36 @@ def load_experiments(experiments_path):
         return yaml.safe_load(f) or {}
 
 
-def find_images(sample_dir, exts, pattern=PANEL_OPTIONAL["_image_glob"]):
+def image_matches(path, image_ext):
+    """Whether an image path matches a panel's _image_ext.
+
+    path: file path relative to the sample folder.
+    image_ext: _image_ext value: "[subfolder/]ending", the ending being an extension without the dot
+        (qptiff) or a full file name (ch0000_dapi.ome.tif).
+    Returns True when path sits directly in the subfolder (the sample folder itself without one) and
+    its name is the ending or ends in "." + ending.
+    """
+    folder, ending = os.path.split(image_ext)
+    name = os.path.basename(path)
+    return os.path.dirname(path) == folder and (name == ending or name.endswith("." + ending))
+
+
+def find_images(sample_dir, image_ext):
     """Image files of one sample folder.
 
     sample_dir: sample folder path.
-    exts: accepted extensions without the dot, e.g. ["qptiff"].
-    pattern: glob relative to sample_dir the files must match (default "*": directly in the folder).
-    Returns the sorted paths, relative to sample_dir, ending in any of exts; [] if the folder is missing.
+    image_ext: _image_ext value, see image_matches.
+    Returns the sorted paths, relative to sample_dir, matching image_ext; [] if the folder is missing.
     """
-    if not os.path.isdir(sample_dir):
+    # only the subfolder named in image_ext is listed, never the whole (possibly huge) sample folder
+    search_dir = os.path.join(sample_dir, os.path.dirname(image_ext))
+    if not os.path.isdir(search_dir):
         return []
-    # regular files only (no subfolders) matching the pattern whose name ends in one of the extensions
+    # regular files only (no subfolders) whose path matches image_ext
     return sorted(
         os.path.relpath(f, sample_dir)
-        for f in glob.glob(os.path.join(glob.escape(sample_dir), pattern))
-        if os.path.isfile(f) and any(f.endswith("." + e) for e in exts)
+        for f in glob.glob(os.path.join(glob.escape(search_dir), "*"))
+        if os.path.isfile(f) and image_matches(os.path.relpath(f, sample_dir), image_ext)
     )
 
 
@@ -165,18 +177,18 @@ def get_samples(experiments, experiments_path=None):
         if missing:
             errors.append(f"panel {tissue}/{panel}: missing or null {', '.join(missing)}")
             continue
-        # metadata keys without the leading "_", e.g. panel_meta["image_ext"], optional keys defaulted
-        panel_meta = {k.lstrip("_"): v for k, v in {**PANEL_OPTIONAL, **panel_node}.items() if is_meta(k)}
+        # metadata keys without the leading "_", e.g. panel_meta["image_ext"]
+        panel_meta = {k.lstrip("_"): v for k, v in panel_node.items() if is_meta(k)}
         # channel lists given as a single name become one-element lists
         for key in CHANNEL_LIST_KEYS:
             if isinstance(panel_meta[key], str):
                 panel_meta[key] = [panel_meta[key]]
 
-        # image: exactly one file with the panel's extension (and glob) in the sample folder
+        # image: exactly one file matching the panel's _image_ext in the sample folder
         sample_dir = os.path.join(base_path, tissue, panel, donor, sample)
-        images = find_images(sample_dir, [panel_meta["image_ext"]], panel_meta["image_glob"])
+        images = find_images(sample_dir, panel_meta["image_ext"])
         if len(images) != 1:
-            errors.append(f"sample {sample_id}: expected one {panel_meta['image_glob']} *.{panel_meta['image_ext']} "
+            errors.append(f"sample {sample_id}: expected one image matching _image_ext {panel_meta['image_ext']!r} "
                           f"in {sample_dir}, found {len(images)}")
             continue
 
@@ -220,33 +232,17 @@ def get_panel_exts(experiments):
     return exts
 
 
-def get_panel_globs(experiments):
-    """Image glob of every panel that defines one (_image_glob).
-
-    experiments: parsed experiments.yml dict.
-    Returns {panel: _image_glob}, across all tissues.
-    """
-    globs = {}
-    # a panel name used in several tissues keeps the glob of the last one read
-    for _, tissue_node in layer_items(experiments):
-        for panel, panel_node in layer_items(tissue_node):
-            if panel_node and panel_node.get("_image_glob"):
-                globs[panel] = panel_node["_image_glob"]
-    return globs
-
-
-def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS, panel_globs=None):
+def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS):
     """Find the sample folders on disk, {base_path}/{tissue}/{panel}/{donor}/{sample}/.
 
     base_path: raw proteomics directory (_base_path).
-    panel_exts: {panel: extension} from get_panel_exts; panels not in it use default_exts.
-    default_exts: extensions tried for panels not yet in experiments.yml.
-    panel_globs: {panel: image glob} from get_panel_globs; panels not in it look directly in the folder.
+    panel_exts: {panel: _image_ext} from get_panel_exts; panels not in it use default_exts.
+    default_exts: _image_ext values tried in order for panels not yet in experiments.yml; the first
+        one finding an image is used.
     Returns {(tissue, panel, donor, sample): [image paths relative to the sample folder]}; the list is
     empty for sample folders that hold no image yet (e.g. CODEX samples that only have their crop geojson).
     """
     panel_exts = panel_exts or {}
-    panel_globs = panel_globs or {}
     found = {}
     # every directory exactly four levels below base_path is a sample folder
     for sample_dir in sorted(glob.glob(os.path.join(base_path, "*", "*", "*", "*", ""))):
@@ -254,9 +250,9 @@ def scan_raw_samples(base_path, panel_exts=None, default_exts=DEFAULT_IMAGE_EXTS
         # skip folders whose path has a "_"-prefixed level, which would clash with metadata keys
         if any(is_meta(k) for k in key):
             continue
-        # images: files with the panel's extension, or any default extension for unknown panels
+        # images: files matching the panel's _image_ext, or the first default finding any for unknown panels
         exts = [panel_exts[key[1]]] if key[1] in panel_exts else list(default_exts)
-        found[key] = find_images(sample_dir, exts, panel_globs.get(key[1], PANEL_OPTIONAL["_image_glob"]))
+        found[key] = next((images for e in exts if (images := find_images(sample_dir, e))), [])
     return found
 
 
@@ -347,5 +343,5 @@ def unlisted_samples(experiments, experiments_path=None):
         return []
     # compare the samples in the sheet with the sample folders on disk
     listed = {(t, p, d, s) for t, p, d, s, _ in iter_samples(experiments)}
-    scanned = scan_raw_samples(base_path, get_panel_exts(experiments), panel_globs=get_panel_globs(experiments))
+    scanned = scan_raw_samples(base_path, get_panel_exts(experiments))
     return ["/".join(k) for k, images in scanned.items() if len(images) == 1 and k not in listed]

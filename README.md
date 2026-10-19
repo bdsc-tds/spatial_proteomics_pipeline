@@ -19,9 +19,9 @@ Raw images, one per sample folder:
 
 e.g. `codex/raw/NSCLC/human_IO60_metabolism/donor_01/donor_01/donor_01.qptiff`.
 Sample folders without an image yet (e.g. only a crop geojson) are ignored. The image may also sit
-deeper in the sample folder (`_image_glob`), e.g. Xenium protein data (`config/configs_xenium_mm/`),
-where the sample folder is the Xenium output folder and the image is the multi-file OME-TIFF opened
-through `morphology_focus/ch0000_*.ome.tif`.
+in a subfolder of the sample folder, e.g. Xenium protein data (`config/configs_xenium_mm/`), where
+the sample folder is the Xenium output folder and the image is the multi-file OME-TIFF opened
+through `morphology_focus/ch0000_dapi.ome.tif` (see `_image_ext` below).
 
 The sample ID used throughout is `tissue/panel/donor/sample`. All results go to a `processed/`
 folder next to `raw/` (`output_path` in the config), one folder per analysis:
@@ -82,7 +82,9 @@ NSCLC:
     donor_01: [donor_01]          # donor: [samples]
 ```
 
-Optional panel key: `_image_glob` (default `*`), where the image sits inside the sample folder.
+`_image_ext` is how the image path inside the sample folder ends: an extension (`qptiff`,
+`ome.tiff`), optionally behind a subfolder (`images/ome.tiff`), or a full file name
+(`morphology_focus/ch0000_dapi.ome.tif` for Xenium). Exactly one file must match.
 
 The nuclear and membrane signals given to the segmentation methods are each the per-pixel maximum of their channels
 (raw values), after removing every channel's pixel value offset read from the OME metadata (+100 on

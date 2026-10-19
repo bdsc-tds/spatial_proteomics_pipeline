@@ -12,6 +12,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import font_manager
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -86,6 +87,57 @@ def savefig(df, out_file, dpi=300, bbox_inches="tight", close=True, pdf=False):
     plt.savefig(Path(out_file).with_suffix(".png"), dpi=dpi, bbox_inches=bbox_inches)
     if close:
         plt.close()
+
+
+def _patch_plotnine_layout():
+    """Let LayoutTree.resize honour per-composition panel ratios (set by panel_ratios), once.
+
+    plotnine (0.15) has no plot_layout(widths=/heights=): after drawing, its layout tree resets the gridspec
+    of every composition so that all panels get the same size, which overrides any ratio set beforehand.
+    """
+    from plotnine._mpl.layout_manager._layout_tree import ColumnsTree, LayoutTree, RowsTree
+    if getattr(LayoutTree, "_panel_ratios_patched", False):
+        return
+    create = LayoutTree.create
+
+    def create_with_ratios(cmp, lookup_spaces):
+        # carry the composition's ratios over to its layout tree (nested compositions recurse through here)
+        tree = create(cmp, lookup_spaces)
+        tree.panel_ratios = getattr(cmp, "_panel_ratios", None)
+        return tree
+
+    def new_sizes(tree, plot_sizes, panel_sizes):
+        # panels split their mean size by the ratios (equal without ratios), space around the panels unchanged
+        plot_sizes, panel_sizes = np.array(plot_sizes), np.array(panel_sizes)
+        ratios = getattr(tree, "panel_ratios", None)
+        ratios = np.ones(len(panel_sizes)) if ratios is None else ratios
+        return panel_sizes.mean() * ratios / ratios.mean() + (plot_sizes - panel_sizes)
+
+    def resize_columns(self):
+        widths = new_sizes(self, self.plot_widths, self.panel_widths)
+        self.gridspec.set_width_ratios(widths / widths.min())
+        self.resize_sub_compositions()
+
+    def resize_rows(self):
+        heights = new_sizes(self, self.plot_heights, self.panel_heights)
+        self.gridspec.set_height_ratios(heights / heights.max())
+        self.resize_sub_compositions()
+
+    LayoutTree.create = staticmethod(create_with_ratios)
+    ColumnsTree.resize = resize_columns
+    RowsTree.resize = resize_rows
+    LayoutTree._panel_ratios_patched = True
+
+
+def panel_ratios(cmp, ratios):
+    """Panel size ratios of a plotnine composition: widths for p1 | p2, heights for p1 / p2.
+
+    Apply it last (after any `+`/`&` on the composition). Each plot is still drawn by plotnine, matplotlib's
+    gridspec sizes them, e.g. savefig_plotnine(panel_ratios(p_frac | p_counts, [3, 1]), None, out).
+    """
+    _patch_plotnine_layout()
+    cmp._panel_ratios = np.asarray(ratios, dtype=float)
+    return cmp
 
 
 # function to save plots with plotnine
