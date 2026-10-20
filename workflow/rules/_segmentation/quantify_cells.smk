@@ -56,7 +56,7 @@ rule mask_to_geojson_mesmer:
         cytoplasm=OUT + "/segmentation/mesmer/{sample_id}/cytoplasm_boundaries.geojson",
     resources:
         runtime=120,
-        mem='16G',
+        mem='60G',
     log:
         OUT + "/segmentation/mesmer/{sample_id}/logs/mask_to_geojson.log"
     container:
