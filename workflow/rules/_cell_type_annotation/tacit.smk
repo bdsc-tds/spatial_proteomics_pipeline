@@ -30,11 +30,19 @@ def tacit_xenium_dir(sample_id):
     return None
 
 
-# Xenium segmentation of the run's own cells (config xenium_alignment: xenium_segmentation), names the output folder
-TACIT_XENIUM_SEG = config["xenium_alignment"]["xenium_segmentation"]
-# samples imaged on Xenium (technology xenium) whose panel has a signature
+# Xenium segmentation whose cells get TACIT (config tacit: xenium_segmentation), names the output folder
+TACIT_XENIUM_SEG = TACIT.get("xenium_segmentation", "10x_mm_5um")
+
+
+def tacit_xenium_seg_dir(sample_id):
+    """Output folder of the TACIT_XENIUM_SEG segmentation of the sample's Xenium run (read_xenium_sample path), or None."""
+    d = tacit_xenium_dir(sample_id)
+    return xenium_segmentations(d).get(TACIT_XENIUM_SEG, (None, None))[0] if d else None
+
+
+# samples imaged on Xenium (technology xenium) whose panel has a signature and whose run has that segmentation
 TACIT_XENIUM_SAMPLE_IDS = [s for s in TACIT_SAMPLE_IDS
-                           if SAMPLES[s]["panel_meta"]["technology"] == "xenium" and tacit_xenium_dir(s)]
+                           if SAMPLES[s]["panel_meta"]["technology"] == "xenium" and tacit_xenium_seg_dir(s)]
 
 # cell type of every cell of one sample (cell_id, cell_type, TACIT's UMAP1/UMAP2)
 rule tacit_mesmer:
@@ -94,12 +102,11 @@ use rule tacit_mesmer as tacit_cellpose with:
 rule xenium_protein_table:
     input:
         script=f"{workflow.basedir}/scripts/_cell_type_annotation/xenium_protein_table.py",
-        xenium_cells=lambda wc: os.path.join(tacit_xenium_dir(wc.sample_id), "cells.parquet"),
-        xenium_experiment=lambda wc: os.path.join(tacit_xenium_dir(wc.sample_id), "experiment.xenium"),
     output:
         feature_table=OUT + "/cell_type_annotation/tacit/xenium_" + TACIT_XENIUM_SEG + "/{sample_id}/feature_table.csv",
     params:
-        xenium_dir=lambda wc: tacit_xenium_dir(wc.sample_id),
+        # TACIT_XENIUM_SEG segmentation of the Xenium run (normalised_results/outs)
+        xenium_dir=lambda wc: tacit_xenium_seg_dir(wc.sample_id),
     threads: 1
     resources:
         runtime=60,

@@ -1,7 +1,7 @@
 """Write the 10x protein intensities of one Xenium run as a quantify_cells feature table.
 
 Reads the run with read_xenium_sample(gex_only=False) and keeps its "Protein Expression" features
-(prot_ prefix removed), for the cells of the run's own segmentation. Writes one row per cell:
+(prot_ prefix removed), for the cells of one Xenium Ranger segmentation (e.g. 10x_mm_5um). Writes one row per cell:
 cell_id, centroid (px and µm), area (px and µm²) and one column per protein, so that run_tacit.R and
 plot_tacit.py read it like a quantify_cells feature table.
 """
@@ -21,7 +21,7 @@ from xenium_readwrite import read_xenium_sample, read_xenium_specs
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (experiment.xenium, cells.parquet)")
+    parser.add_argument("--xenium_dir", required=True, help="Xenium Ranger output folder of the segmentation (normalised_results/outs)")
     parser.add_argument("--out_csv", required=True, help="output feature table")
     return parser.parse_args()
 
