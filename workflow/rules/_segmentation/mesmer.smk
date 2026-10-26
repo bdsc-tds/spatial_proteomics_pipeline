@@ -9,9 +9,9 @@ rule segmentation_mesmer:
         # from prepare_segmentation_input
         image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
     output:
-        cells=temp(mesmer_dir + "cell_boundaries_mask.npy"),
-        nuclei=temp(mesmer_dir + "nuclei_boundaries_mask.npy"),
-        cytoplasm=temp(mesmer_dir + "cytoplasm_boundaries_mask.npy"),
+        cells=mesmer_dir + "cell_boundaries_mask.tif",
+        nuclei=mesmer_dir + "nuclei_boundaries_mask.tif",
+        cytoplasm=mesmer_dir + "cytoplasm_boundaries_mask.tif",
     params:
         model_dir=config["segmentation"]["mesmer"]["model_dir"],
     #threads: gpu_threads(gpu=1, cpu=8)

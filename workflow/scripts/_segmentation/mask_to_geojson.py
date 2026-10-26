@@ -4,6 +4,7 @@ import argparse
 import colorsys
 import json
 import numpy as np
+import tifffile
 from functools import reduce
 from pathlib import Path
 from shapely.geometry import MultiPolygon, Polygon, mapping
@@ -74,8 +75,8 @@ def contour_to_geojson_coords(contour, row_offset, col_offset):
         coords.append(coords[0])
     return coords
 
-def mask_to_geojson(npy_path, output_path=None, min_pixels=5):
-    mask = np.load(Path(npy_path))
+def mask_to_geojson(mask_path, output_path=None, min_pixels=5):
+    mask = tifffile.imread(Path(mask_path))
     assert mask.ndim == 2, f"Expected 2D mask, got {mask.shape}"
     print(f"Mask shape: {mask.shape}, unique labels: {len(np.unique(mask))}")
 
@@ -139,16 +140,16 @@ def mask_to_geojson(npy_path, output_path=None, min_pixels=5):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert a .npy segmentation mask to GeoJSON."
+        description="Convert a label mask (TIFF) to GeoJSON."
     )
-    parser.add_argument("npy",    help="Input .npy mask file")
+    parser.add_argument("mask",   help="Input label mask (TIFF)")
     parser.add_argument("output", help="Output .geojson file")
     parser.add_argument("--min-pixels",  type=int,   default=5,   metavar="N",
                         help="Skip labels with fewer than N pixels (default 5)")
     args = parser.parse_args()
 
     mask_to_geojson(
-        args.npy, args.output,
+        args.mask, args.output,
         min_pixels=args.min_pixels,
     )
 

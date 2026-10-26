@@ -14,6 +14,8 @@ import sys
 
 import numpy as np
 import pandas as pd
+import tifffile
+import zarr
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
@@ -23,7 +25,7 @@ from readwrite import MultiplexImage
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="image the mask was computed on (same Y, X)")
-    parser.add_argument("--mask", required=True, help="cell label mask (.npy, 0 = background)")
+    parser.add_argument("--mask", required=True, help="cell label mask (tiled TIFF, 0 = background)")
     parser.add_argument("--pixel_size_fallback", type=float, required=True, help="µm/px used when the image metadata has none")
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--block_rows", type=int, default=2048, help="mask rows processed at once")
@@ -44,9 +46,10 @@ def blockwise_bincount(mask, n_labels, block_rows, weights=None):
 def main():
     args = parse_args()
 
-    # label mask, memory-mapped
-    mask = np.load(args.mask, mmap_mode="r")
-    n_labels = int(mask.max()) + 1
+    # label mask, read lazily (only the tiles of one row block are decompressed at a time)
+    mask = zarr.open(tifffile.imread(args.mask, aszarr=True), mode="r")
+    n_labels = max(int(np.asarray(mask[y : y + args.block_rows]).max())
+                   for y in range(0, mask.shape[0], args.block_rows)) + 1
     print(f"mask: {mask.shape}, {n_labels - 1} labels")
 
     # pixel size: image metadata first, config fallback otherwise

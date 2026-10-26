@@ -7,7 +7,7 @@ rule quantify_cells_mesmer:
         script=f"{workflow.basedir}/scripts/_segmentation/quantify_cells.py",
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
-        mask=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.npy",
+        mask=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.tif",
     output:
         feature_table=OUT + "/segmentation/mesmer/{sample_id}/feature_table.csv",
     params:
@@ -37,7 +37,7 @@ use rule quantify_cells_mesmer as quantify_cells_cellpose with:
         script=f"{workflow.basedir}/scripts/_segmentation/quantify_cells.py",
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
-        mask=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.npy",
+        mask=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.tif",
     output:
         feature_table=OUT + "/segmentation/cellpose/{sample_id}/feature_table.csv",
     log:
@@ -47,9 +47,9 @@ use rule quantify_cells_mesmer as quantify_cells_cellpose with:
 rule mask_to_geojson_mesmer:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/mask_to_geojson.py",
-        cells=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.npy",
-        nuclei=OUT + "/segmentation/mesmer/{sample_id}/nuclei_boundaries_mask.npy",
-        cytoplasm=OUT + "/segmentation/mesmer/{sample_id}/cytoplasm_boundaries_mask.npy",
+        cells=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.tif",
+        nuclei=OUT + "/segmentation/mesmer/{sample_id}/nuclei_boundaries_mask.tif",
+        cytoplasm=OUT + "/segmentation/mesmer/{sample_id}/cytoplasm_boundaries_mask.tif",
     output:
         cells=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries.geojson",
         nuclei=OUT + "/segmentation/mesmer/{sample_id}/nuclei_boundaries.geojson",
@@ -72,9 +72,9 @@ rule mask_to_geojson_mesmer:
 use rule mask_to_geojson_mesmer as mask_to_geojson_cellpose with:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/mask_to_geojson.py",
-        cells=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.npy",
-        nuclei=OUT + "/segmentation/cellpose/{sample_id}/nuclei_boundaries_mask.npy",
-        cytoplasm=OUT + "/segmentation/cellpose/{sample_id}/cytoplasm_boundaries_mask.npy",
+        cells=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.tif",
+        nuclei=OUT + "/segmentation/cellpose/{sample_id}/nuclei_boundaries_mask.tif",
+        cytoplasm=OUT + "/segmentation/cellpose/{sample_id}/cytoplasm_boundaries_mask.tif",
     output:
         cells=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries.geojson",
         nuclei=OUT + "/segmentation/cellpose/{sample_id}/nuclei_boundaries.geojson",

@@ -9,9 +9,9 @@ rule segmentation_cellpose:
         # from prepare_segmentation_input
         image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
     output:
-        cells=temp(cellpose_dir + "cell_boundaries_mask.npy"),
-        nuclei=temp(cellpose_dir + "nuclei_boundaries_mask.npy"),
-        cytoplasm=temp(cellpose_dir + "cytoplasm_boundaries_mask.npy"),
+        cells=cellpose_dir + "cell_boundaries_mask.tif",
+        nuclei=cellpose_dir + "nuclei_boundaries_mask.tif",
+        cytoplasm=cellpose_dir + "cytoplasm_boundaries_mask.tif",
     params:
         model_dir=config["segmentation"]["cellpose"]["model_dir"],
         model=config["segmentation"]["cellpose"]["model"],
