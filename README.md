@@ -30,7 +30,7 @@ folder next to `raw/` (`output_path` in the config), one folder per analysis:
 processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
-  segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.npy, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose)
+  segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose)
   xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
   snkmt.db                                          run monitoring database
 ```
@@ -154,8 +154,8 @@ subtraction is the exception: its switch also chooses the image every step reads
   `update-experiments` and fill in the new panel's `_` keys. qptiff and OME-TIFF are read by
   `workflow/scripts/utils/readwrite.py`; another format only needs support there.
 - **New segmentation method:** add `workflow/rules/_segmentation/<method>.smk` with a
-  `segmentation_<method>` rule writing `cell_`, `nuclei_` and `cytoplasm_boundaries_mask.npy` (all
-  labelled with the cell id, see `scripts/_segmentation/label_masks.py`) to
+  `segmentation_<method>` rule writing `cell_`, `nuclei_` and `cytoplasm_boundaries_mask.tif` (tiled,
+  compressed, all labelled with the cell id, see `scripts/_segmentation/label_masks.py`) to
   `segmentation/<method>/{sample_id}/`, add `quantify_cells_<method>` and `mask_to_geojson_<method>`
   to `_segmentation/quantify_cells.smk` (`use rule quantify_cells_mesmer as quantify_cells_<method>
   with:`, changing the paths), and list the method in `segmentation: methods`.
