@@ -30,8 +30,11 @@ folder next to `raw/` (`output_path` in the config), one folder per analysis:
 processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
-  segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose)
+  segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose, virtues)
+  segmentation/virtues/{sample_id}/                 + class_map.tif, classes.csv, channel_stats.csv (cell mask only, no nuclei / cytoplasm)
+  segmentation/virtues/panels/{panel}/              marker_embeddings.pt, standardization.csv
   xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
+  cell_type_annotation/{ct_method}/{seg_method}/{sample_id}/  cell_types.csv, logs/  (tacit, virtues; also xenium_{seg} for 10x's cells)
   snkmt.db                                          run monitoring database
 ```
 
@@ -141,8 +144,19 @@ Some rules run on the `gpu` partition:  (set `gpu: available: false` in the conf
 |---|---|---|
 | `image_preparation` | `prepare_dapi`, `prepare_segmentation_input` | Reads the raw image (qptiff or OME-TIFF) one channel at a time; `prepare_dapi` writes the channel table and a DAPI image (alignment input), `prepare_segmentation_input` a two-channel segmentation input (nuclear and membrane max projections, offsets removed). Split so that changing segmentation markers does not re-run the alignment |
 | `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/). When on, all later steps read the subtracted image |
-| `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Nucleus / whole-cell / cytoplasm masks for each method in `segmentation: methods`: Mesmer (deepcell, through SPACEc) and/or Cellpose 3 (through SPACEc: `nuclei` model on the nuclear signal, `cyto3` on membrane + nuclear, diameters set in µm); per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
+| `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Nucleus / whole-cell / cytoplasm masks for each method in `segmentation: methods`: Mesmer (deepcell, through SPACEc) and/or Cellpose 3 (through SPACEc: `nuclei` model on the nuclear signal, `cyto3` on membrane + nuclear, diameters set in µm) and/or VirTues (see below; whole cells only); per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
 | `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
+| `cell_type_annotation` | `tacit_{seg_method}`, `virtues_cell_types_{seg_method}`, `tacit_xenium`, `virtues_cell_types_xenium` | Cell types of every segmentation method's cells for each method in `cell_type_annotation: methods`: TACIT (marker signatures, `signatures/{panel}.csv`) and/or VirTues (majority class of each cell's pixels in VirTues' class map). Samples imaged on Xenium also get cell types for 10x's own cells (`cell_type_annotation: xenium_segmentation`) |
+
+**VirTues** ([bunnelab/virtues](https://github.com/bunnelab/virtues), `gpu` environment, A100 GPU): a
+foundation model that reads any panel, identifying each channel by the ESM-2 embedding of its protein
+(`virtues/{panel}.csv` next to the dataset config: `channel_name, uniprot_id`, blank = not used; DAPI
+as Histone H3 P68431). The mapped channels are resampled to 1 µm/px, clipped at their 99th percentile
+in the tissue, log1p-transformed and z-scored with the panel's mean / std (spora's standardization);
+the segmentation head then predicts whole cells and, for every pixel, one of 9 classes: 7 cell types
+(B cell, CD4 T, CD8 T, Fibroblasts / Stroma, Myeloid, Tumor, Vessel / Endo.), None (background) and
+Unknown. The class map labels the cells
+of every mask; the VirTues cell mask is upsampled to the image's pixel grid like the other methods'.
 
 A switched-off step is not loaded: later steps read its existing outputs as plain input files, so it
 is never re-run (Snakemake stops with a missing input error if they do not exist yet). Background
@@ -166,7 +180,7 @@ subtraction is the exception: its switch also chooses the image every step reads
 
 ```
 run.sh                                   launch the pipeline on SLURM
-pixi.toml, pixi.lock                     environments (default, spacec, snakemake)
+pixi.toml, pixi.lock                     environments (default, spacec, tacit, gpu, snakemake)
 reproducibility/                         container definition and build script
 profiles/slurm/config.v8+.yaml           Snakemake SLURM profile
 config/configs_<dataset>/                config.yml + experiments.yml per dataset

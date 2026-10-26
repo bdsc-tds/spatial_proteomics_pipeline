@@ -19,10 +19,12 @@ From: ubuntu:22.04
     # Move pixi bin to a global location so it's always found
     ln -s /opt/pixi/bin/pixi /usr/local/bin/pixi
 
-    # 3. Install all four environments into one image (default, spacec, tacit, snakemake)
+    # 3. Install all five environments into one image (default, spacec, tacit, gpu, snakemake). The build
+    # node has no GPU: declare CUDA 12 so pixi accepts the gpu env's system requirement
     cd /app
     pixi config set --local run-post-link-scripts insecure
-    pixi install --locked -e default -e spacec -e tacit -e snakemake
+    export CONDA_OVERRIDE_CUDA=12
+    pixi install --locked -e default -e spacec -e tacit -e gpu -e snakemake
 
     # 4. Create the 'px' shorthand for runtime
     echo '#!/bin/bash' > /usr/local/bin/px

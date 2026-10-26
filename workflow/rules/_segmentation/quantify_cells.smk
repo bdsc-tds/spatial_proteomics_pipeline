@@ -43,6 +43,18 @@ use rule quantify_cells_mesmer as quantify_cells_cellpose with:
     log:
         OUT + "/segmentation/cellpose/{sample_id}/logs/quantify_cells.log"
 
+use rule quantify_cells_mesmer as quantify_cells_virtues with:
+    input:
+        script=f"{workflow.basedir}/scripts/_segmentation/quantify_cells.py",
+        # raw or background-subtracted image (source_image, Snakefile)
+        image=source_image,
+        # from segmentation_virtues
+        mask=OUT + "/segmentation/virtues/{sample_id}/cell_boundaries_mask.tif",
+    output:
+        feature_table=OUT + "/segmentation/virtues/{sample_id}/feature_table.csv",
+    log:
+        OUT + "/segmentation/virtues/{sample_id}/logs/quantify_cells.log"
+
 # cell, nuclei and cytoplasm masks as GeoJSON polygons (e.g. for QuPath)
 rule mask_to_geojson_mesmer:
     input:
@@ -82,10 +94,33 @@ use rule mask_to_geojson_mesmer as mask_to_geojson_cellpose with:
     log:
         OUT + "/segmentation/cellpose/{sample_id}/logs/mask_to_geojson.log"
 
-# outputs of every method in segmentation: methods
+# VirTues predicts whole cells only: cell GeoJSON alone
+rule mask_to_geojson_virtues:
+    input:
+        script=f"{workflow.basedir}/scripts/_segmentation/mask_to_geojson.py",
+        # from segmentation_virtues
+        cells=OUT + "/segmentation/virtues/{sample_id}/cell_boundaries_mask.tif",
+    output:
+        cells=OUT + "/segmentation/virtues/{sample_id}/cell_boundaries.geojson",
+    resources:
+        runtime=120,
+        mem='60G',
+    log:
+        OUT + "/segmentation/virtues/{sample_id}/logs/mask_to_geojson.log"
+    container:
+        config["containers"]["pixi"]
+    shell:
+        """
+        {PX} python {input.script} {input.cells} {output.cells} &> {log}
+        """
+
+# outputs of every method in segmentation: methods (VirTues: no nuclei / cytoplasm)
 rule segmentation_all:
     input:
         expand(OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
                seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
+        expand(OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries.geojson",
+               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
         expand(OUT + "/segmentation/{seg_method}/{sample_id}/{compartment}_boundaries.geojson",
-               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS, compartment=["cell", "nuclei", "cytoplasm"]),
+               seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=SAMPLE_IDS,
+               compartment=["nuclei", "cytoplasm"]),

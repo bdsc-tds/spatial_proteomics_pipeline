@@ -87,6 +87,29 @@ SEG_METHODS = config["segmentation"]["methods"]
 wildcard_constraints:
     seg_method="|".join(re.escape(m) for m in SEG_METHODS),
 
+# cell type annotation methods (tacit, virtues), one rule file each
+CT_METHODS = config["cell_type_annotation"]["methods"]
+
+
+def xenium_run_dir(sample_id):
+    """Xenium output folder of a sample imaged on Xenium: the closest parent of its image holding experiment.xenium."""
+    d = os.path.dirname(SAMPLES[sample_id]["image"])
+    while d != os.path.dirname(d):
+        if os.path.isfile(os.path.join(d, "experiment.xenium")):
+            return d
+        d = os.path.dirname(d)
+    return None
+
+
+# Xenium segmentation whose cells also get cell types (config cell_type_annotation: xenium_segmentation)
+XENIUM_CT_SEG = config["cell_type_annotation"].get("xenium_segmentation", "10x_mm_5um")
+
+
+def xenium_ct_seg_dir(sample_id):
+    """Output folder of the XENIUM_CT_SEG segmentation of the sample's Xenium run (read_xenium_sample path), or None."""
+    d = xenium_run_dir(sample_id)
+    return xenium_segmentations(d).get(XENIUM_CT_SEG, (None, None))[0] if d else None
+
 # a step switched off (config run:) is not loaded: the steps after it read its existing outputs as
 # plain input files (never re-run, missing input error if absent). Background subtraction is always
 # loaded: its switch also selects the image every step reads (source_image)
