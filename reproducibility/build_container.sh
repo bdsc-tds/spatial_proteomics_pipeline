@@ -12,7 +12,7 @@
 #SBATCH --job-name=build_spatial_proteomics_container
 #SBATCH --partition cpu
 
-#SBATCH --time 04:00:00
+#SBATCH --time 02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --tasks-per-node=1
@@ -64,6 +64,11 @@ if [[ ! -f "$FULL_DEF_PATH" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$PROJECT_ROOT/external/virtues/pyproject.toml" ]]; then
+    echo "ERROR: VirTues submodule missing; run: git submodule update --init"
+    exit 1
+fi
+
 # 4. Setup Scratch
 SCRATCH_WORK_DIR="/path/to/scratch(date +%s)"
 # =================================================
@@ -80,6 +85,9 @@ mkdir -p "$SCRATCH_WORK_DIR"
 echo ">>> Staging files..."
 cp "${PROJECT_ROOT}/pixi.toml" "$SCRATCH_WORK_DIR/"
 cp "${PROJECT_ROOT}/pixi.lock" "$SCRATCH_WORK_DIR/"
+# VirTues source exactly as in the pinned submodule commit (no .git, no local edits)
+mkdir -p "$SCRATCH_WORK_DIR/external/virtues"
+git -C "${PROJECT_ROOT}/external/virtues" archive HEAD | tar -x -C "$SCRATCH_WORK_DIR/external/virtues"
 cp "$FULL_DEF_PATH" "$SCRATCH_WORK_DIR/singularity.def"
 
 

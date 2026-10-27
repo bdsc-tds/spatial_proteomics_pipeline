@@ -5,6 +5,8 @@ From: ubuntu:22.04
     # Copy your manifest files to /app
     pixi.toml /app/pixi.toml
     pixi.lock /app/pixi.lock
+    # VirTues source (git submodule), installed editable into the gpu env from this path
+    external /app/external
 
 %post
     # 1. Install system basics
@@ -13,8 +15,10 @@ From: ubuntu:22.04
     # Set locales to avoid python encoding issues
     locale-gen en_US.UTF-8
 
-    # 2. Install Pixi globally
+    # 2. Install Pixi globally, pinned to the version that wrote pixi.lock (pixi 0.72 cannot parse
+    # the per-environment platforms in pixi.toml)
     export PIXI_HOME=/opt/pixi
+    export PIXI_VERSION=v0.83.0
     curl -fsSL https://pixi.sh/install.sh | bash
     # Move pixi bin to a global location so it's always found
     ln -s /opt/pixi/bin/pixi /usr/local/bin/pixi

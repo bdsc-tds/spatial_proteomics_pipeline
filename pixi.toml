@@ -2,7 +2,8 @@
 authors = ["user"]
 channels = ["conda-forge", "bioconda"]
 name = "spatial_proteomics_pipeline"
-platforms = ["linux-64"]
+# linux-64-cuda declares CUDA 12 and is used by the gpu environment only
+platforms = ["linux-64", { name = "linux-64-cuda", platform = "linux-64", cuda = "12" }]
 version = "0.1.0"
 
 # five environments only:
@@ -13,7 +14,7 @@ version = "0.1.0"
 #   gpu       - VirTues segmentation and marker embeddings (torch + flash-attn, CUDA 12)
 #   snakemake - the pipeline driver, kept small; runs outside the container (see run.sh)
 [environments]
-default = {features=["default"]}
+default = {features=["default"], platforms=["linux-64"]}
 spacec = {features=["spacec"], no-default-feature=true}
 tacit = {features=["tacit"], no-default-feature=true}
 gpu = {features=["gpu"], no-default-feature=true}
@@ -141,10 +142,7 @@ R_LIBS_USER = "$CONDA_PREFIX/lib/R/library"
 # VirTues (github.com/bunnelab/virtues, pinned commit): its attention layers import flash-attn, so a
 # CUDA 12 build of torch and an Ampere or newer GPU (A100 on the gpu partition) are required
 [feature.gpu]
-platforms = ["linux-64"]
-
-[feature.gpu.system-requirements]
-cuda = "12"
+platforms = ["linux-64-cuda"]
 
 [feature.gpu.dependencies]
 python = "3.12.*"
@@ -163,6 +161,8 @@ tifffile = "*"
 imagecodecs = "*"
 zarr = ">=3"
 loguru = "*"
+# imported at module level by instanseg (VirTues' segmentation head), but only an optional extra of instanseg-torch
+seaborn = "*"
 # exploratory notebooks on the VirTues outputs
 ipykernel = "*"
 matplotlib = "*"
@@ -172,7 +172,9 @@ matplotlib = "*"
 fair-esm = "*"
 # instance post-processing of VirTues' segmentation head
 instanseg-torch = "*"
-virtues = { git = "https://github.com/bunnelab/virtues.git", rev = "2c9c6cba1ee796c4d8dff9329175c47e4a72f409" }
+# VirTues from the git submodule external/virtues (pinned commit), installed editable like upstream's
+# `pip install -e .`: its pyproject packages only virtues/train.py, so a regular (git) install is empty
+virtues = { path = "external/virtues", editable = true }
 
 [feature.snakemake]
 platforms = ["linux-64"]

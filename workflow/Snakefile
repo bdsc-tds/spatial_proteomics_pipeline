@@ -31,7 +31,7 @@ OUT = config["output_path"].rstrip("/")
 EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
 EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
 SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
-SAMPLE_IDS = list(SAMPLES)
+SAMPLE_IDS = list(SAMPLES)[:1]
 XENIUM_SAMPLE_IDS = [s for s in SAMPLE_IDS if SAMPLES[s]["xenium"]]
 print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
 
