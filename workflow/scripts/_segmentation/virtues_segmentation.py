@@ -65,7 +65,11 @@ def load_model(embeddings, model_dir, model):
     head = VirtuesSegmentationHead(virtues_model=backbone, dim_out=HEAD_DIM_OUT, num_celltypes=len(HEAD_CLASSES))
     state = load_file(hf_hub_download("bunnelab/virtues", f"{model}/segmentation-head.safetensors", local_dir=model_dir))
     missing, unexpected = head.load_state_dict(state, strict=False)
-    missing = [k for k in missing if not k.startswith("virtues_model.")]
+
+    # aliases of loaded tensors are not missing: instanseg shares pixel_classifier with instance_processor
+    head_state = head.state_dict()
+    loaded = {head_state[k].data_ptr() for k in state if k in head_state}
+    missing = [k for k in missing if not k.startswith("virtues_model.") and head_state[k].data_ptr() not in loaded]
     if missing or unexpected:
         sys.exit(f"segmentation head does not match the model: missing {missing}, unexpected {unexpected}")
     print(f"loaded {model} backbone and segmentation head", flush=True)

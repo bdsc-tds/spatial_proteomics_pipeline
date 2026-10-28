@@ -127,11 +127,12 @@ rule segmentation_virtues:
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
+        overlap=VIRTUES["overlap"],
     threads: 1
     resources:
         runtime=240,
-        mem='50G',
-        partition=GPU_PARTITION,
+        mem='70G',
+        partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
         virtues_dir + "logs/segmentation_virtues.log"
@@ -147,6 +148,7 @@ rule segmentation_virtues:
         --image {input.image} \
         --model_dir {params.model_dir} \
         --model {params.model} \
+        --overlap {params.overlap} \
         --out_cells {output.cells} \
         --out_class_map {output.class_map} \
         --out_classes {output.classes} \

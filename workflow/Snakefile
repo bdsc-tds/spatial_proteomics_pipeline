@@ -73,6 +73,8 @@ def shell_list(values):
 # GPU rules fall back to the CPU partition when config gpu.available is false
 GPU = config.get("gpu", {}).get("available", False)
 GPU_PARTITION = config.get("gpu", {}).get("partition_name", "gpu") if GPU else "cpu"
+# VirTues needs flash-attn, i.e. Ampere or newer GPUs (no gpu-rtx)
+VIRTUES_GPU_PARTITION = config.get("gpu", {}).get("virtues_partition_name", "gpu") if GPU else "cpu"
 GPU_EXTRA = "--gres=gpu:1" if GPU else ""
 
 
