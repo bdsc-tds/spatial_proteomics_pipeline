@@ -1,6 +1,9 @@
-### --- Cell type annotation: cell types per segmentation method (TACIT, VirTues), TACIT plots over all samples ---
+### --- Cell type annotation: cell types per segmentation method (TACIT), TACIT plots over all samples ---
 # one rule file per method, included only if listed in config cell_type_annotation: methods (CT_METHODS: Snakefile);
 # signatures (TACIT): signatures/{panel}.csv next to the dataset config
+
+# variables defined in other .smk files:
+# CT_METHODS: defined in Snakefile
 
 # --- Rules ---
 for _ct_method in CT_METHODS:

@@ -1,6 +1,13 @@
 # Per-cell quantification and GeoJSON export, one rule per segmentation method: the mesmer rules are
 # the base, other methods derive from them with `use rule` (all inputs restated)
 
+# variables defined in other .smk files:
+# source_image: defined in Snakefile
+# OUT:          defined in Snakefile
+# panel_meta:   defined in Snakefile
+# SEG_METHODS:  defined in Snakefile
+# SAMPLE_IDS:   defined in Snakefile
+
 # area, centroid and mean intensity of every channel per cell
 rule quantify_cells_mesmer:
     input:

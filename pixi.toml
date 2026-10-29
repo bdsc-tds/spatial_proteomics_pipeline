@@ -155,6 +155,8 @@ einops = "*"
 omegaconf = "*"
 safetensors = "*"
 huggingface_hub = "*"
+# KRONOS2 (Hugging Face MahmoodLab/KRONOS2) loads through transformers' trust_remote_code
+transformers = ">=4.56"
 scikit-learn = "*"
 scikit-image = "*"
 tifffile = "*"

@@ -1,5 +1,17 @@
-# VirTues (github.com/bunnelab/virtues) whole-cell masks and per-pixel cell type map, from every channel mapped
-# to a protein in virtues/{panel}.csv. Quantified in quantify_cells.smk, cell types in _cell_type_annotation/virtues.smk
+# VirTues (github.com/bunnelab/virtues) whole-cell masks, from every channel mapped
+# to a protein in virtues/{panel}.csv. Quantified in quantify_cells.smk
+
+# variables defined in other .smk files:
+# os:                    imported in Snakefile
+# re:                    imported in Snakefile
+# OUT:                   defined in Snakefile
+# CONFIG_PATH:           defined in Snakefile
+# SAMPLES:               defined in Snakefile
+# SAMPLE_IDS:            defined in Snakefile
+# source_image:          defined in Snakefile
+# panel_meta:            defined in Snakefile
+# VIRTUES_GPU_PARTITION: defined in Snakefile
+# GPU_EXTRA:             defined in Snakefile
 
 VIRTUES = config["segmentation"]["virtues"]
 virtues_dir = OUT + "/segmentation/virtues/{sample_id}/"
@@ -108,7 +120,7 @@ rule virtues_standardization_stats:
         &> {log}
         """
 
-# VirTues + segmentation head: whole-cell mask on the image's pixel grid and the class map at 1 µm/px
+# VirTues + segmentation head: whole-cell mask on the image's pixel grid
 rule segmentation_virtues:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/virtues_segmentation.py",
@@ -122,16 +134,14 @@ rule segmentation_virtues:
         image=source_image,
     output:
         cells=virtues_dir + "cell_boundaries_mask.tif",
-        class_map=virtues_dir + "class_map.tif",
-        classes=virtues_dir + "classes.csv",
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
-        overlap=VIRTUES["overlap"],
+        blur_sigma=VIRTUES["blur_sigma"],
     threads: 1
     resources:
         runtime=240,
-        mem='70G',
+        mem='150G',
         partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
@@ -148,9 +158,7 @@ rule segmentation_virtues:
         --image {input.image} \
         --model_dir {params.model_dir} \
         --model {params.model} \
-        --overlap {params.overlap} \
+        --blur_sigma {params.blur_sigma} \
         --out_cells {output.cells} \
-        --out_class_map {output.class_map} \
-        --out_classes {output.classes} \
         &> {log}
         """

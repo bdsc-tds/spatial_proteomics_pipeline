@@ -1,6 +1,11 @@
 # Mesmer (deepcell, via SPACEc) masks from the nuclear + membrane signals.
 # Quantified in quantify_cells.smk
 
+# variables defined in other .smk files:
+# OUT:           defined in Snakefile
+# GPU_PARTITION: defined in Snakefile
+# GPU_EXTRA:     defined in Snakefile
+
 mesmer_dir = OUT + "/segmentation/mesmer/{sample_id}/"
 
 rule segmentation_mesmer:

@@ -2,6 +2,17 @@
 # are the base, other methods derive from them with `use rule` (all inputs restated). Samples imaged
 # on Xenium also get TACIT on 10x's own protein intensities (xenium_{xenium_segmentation} folder)
 
+# variables defined in other .smk files:
+# os:                imported in Snakefile
+# sys:               imported in Snakefile
+# CONFIG_PATH:       defined in Snakefile
+# SAMPLES:           defined in Snakefile
+# SAMPLE_IDS:        defined in Snakefile
+# xenium_ct_seg_dir: defined in Snakefile
+# OUT:               defined in Snakefile
+# XENIUM_CT_SEG:     defined in Snakefile
+# SEG_METHODS:       defined in Snakefile
+
 TACIT = config["cell_type_annotation"]["tacit"]
 
 
@@ -78,19 +89,20 @@ use rule tacit_mesmer as tacit_cellpose with:
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/{sample_id}/logs/tacit.log"
 
-use rule tacit_mesmer as tacit_virtues with:
-    input:
-        script=f"{workflow.basedir}/scripts/_cell_type_annotation/run_tacit.R",
-        # from quantify_cells_virtues
-        feature_table=OUT + "/segmentation/virtues/{sample_id}/feature_table.csv",
-        signature=lambda wc: tacit_signature(wc.sample_id),
-    output:
-        cell_types=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/cell_types.csv",
-        ctr=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/ctr.csv",
-        thresholds=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/thresholds.csv",
-        knn=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/knn_fractions.csv",
-    log:
-        OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/logs/tacit.log"
+# VirTues mask disabled for now
+# use rule tacit_mesmer as tacit_virtues with:
+#     input:
+#         script=f"{workflow.basedir}/scripts/_cell_type_annotation/run_tacit.R",
+#         # from quantify_cells_virtues
+#         feature_table=OUT + "/segmentation/virtues/{sample_id}/feature_table.csv",
+#         signature=lambda wc: tacit_signature(wc.sample_id),
+#     output:
+#         cell_types=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/cell_types.csv",
+#         ctr=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/ctr.csv",
+#         thresholds=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/thresholds.csv",
+#         knn=OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/knn_fractions.csv",
+#     log:
+#         OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/logs/tacit.log"
 
 # 10x protein intensities of the Xenium cells (read_xenium_sample) in the quantify_cells feature table format
 rule xenium_protein_table:
@@ -194,22 +206,23 @@ use rule plot_tacit_mesmer as plot_tacit_cellpose with:
     log:
         OUT + "/cell_type_annotation/tacit/cellpose/summary/logs/plot_tacit.log"
 
-use rule plot_tacit_mesmer as plot_tacit_virtues with:
-    input:
-        script=f"{workflow.basedir}/scripts/_cell_type_annotation/plot_tacit.py",
-        # from quantify_cells_virtues
-        feature_tables=expand(OUT + "/segmentation/virtues/{sample_id}/feature_table.csv", sample_id=TACIT_SAMPLE_IDS),
-        cell_types=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/cell_types.csv",
-                          sample_id=TACIT_SAMPLE_IDS),
-        knn_fractions=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/knn_fractions.csv",
-                             sample_id=TACIT_SAMPLE_IDS),
-        signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
-    output:
-        fractions=OUT + "/cell_type_annotation/tacit/virtues/summary/figures/cell_type_fractions.png",
-        sample_fractions=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/figures/cell_type_fractions.png",
-                                sample_id=TACIT_SAMPLE_IDS),
-    log:
-        OUT + "/cell_type_annotation/tacit/virtues/summary/logs/plot_tacit.log"
+# VirTues mask disabled for now
+# use rule plot_tacit_mesmer as plot_tacit_virtues with:
+#     input:
+#         script=f"{workflow.basedir}/scripts/_cell_type_annotation/plot_tacit.py",
+#         # from quantify_cells_virtues
+#         feature_tables=expand(OUT + "/segmentation/virtues/{sample_id}/feature_table.csv", sample_id=TACIT_SAMPLE_IDS),
+#         cell_types=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/cell_types.csv",
+#                           sample_id=TACIT_SAMPLE_IDS),
+#         knn_fractions=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/knn_fractions.csv",
+#                              sample_id=TACIT_SAMPLE_IDS),
+#         signatures=[tacit_signature(s) for s in TACIT_SAMPLE_IDS],
+#     output:
+#         fractions=OUT + "/cell_type_annotation/tacit/virtues/summary/figures/cell_type_fractions.png",
+#         sample_fractions=expand(OUT + "/cell_type_annotation/tacit/virtues/{sample_id}/figures/cell_type_fractions.png",
+#                                 sample_id=TACIT_SAMPLE_IDS),
+#     log:
+#         OUT + "/cell_type_annotation/tacit/virtues/summary/logs/plot_tacit.log"
 
 use rule plot_tacit_mesmer as plot_tacit_xenium with:
     input:
@@ -232,13 +245,14 @@ use rule plot_tacit_mesmer as plot_tacit_xenium with:
     log:
         OUT + "/cell_type_annotation/tacit/xenium_" + XENIUM_CT_SEG + "/summary/logs/plot_tacit.log"
 
-# TACIT labels and plots of every method in segmentation: methods, and of the Xenium cells (samples imaged on Xenium)
+# TACIT labels and plots of every method in segmentation: methods (VirTues disabled for now), and of the Xenium cells
+# (samples imaged on Xenium)
 rule tacit_all:
     input:
         expand(OUT + "/cell_type_annotation/tacit/{seg_method}/{sample_id}/cell_types.csv",
-               seg_method=SEG_METHODS, sample_id=TACIT_SAMPLE_IDS),
+               seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=TACIT_SAMPLE_IDS),
         expand(OUT + "/cell_type_annotation/tacit/{seg_method}/summary/figures/cell_type_fractions.png",
-               seg_method=SEG_METHODS),
+               seg_method=[m for m in SEG_METHODS if m != "virtues"]),
         expand(OUT + "/cell_type_annotation/tacit/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv",
                sample_id=TACIT_XENIUM_SAMPLE_IDS),
         # no plot without Xenium samples (plot_tacit.py needs at least one)

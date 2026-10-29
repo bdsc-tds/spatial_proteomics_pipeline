@@ -31,10 +31,12 @@ processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
   segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose, virtues)
-  segmentation/virtues/{sample_id}/                 + class_map.tif, classes.csv, channel_stats.csv (cell mask only, no nuclei / cytoplasm)
+  segmentation/virtues/{sample_id}/                 + channel_stats.csv (cell mask only, no nuclei / cytoplasm)
   segmentation/virtues/panels/{panel}/              marker_embeddings.pt, standardization.csv
   xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
-  cell_type_annotation/{ct_method}/{seg_method}/{sample_id}/  cell_types.csv, logs/  (tacit, virtues; also xenium_{seg} for 10x's cells)
+  cell_type_annotation/{ct_method}/{seg_method}/{sample_id}/  cell_types.csv, logs/  (tacit; also xenium_{seg} for 10x's cells)
+  dimensionality_reduction/{dr_method}/{seg_method}/{sample_id}/  cell_embeddings.npz, logs/  (virtues, kronos2; also xenium_{seg} for 10x's cells)
+  dimensionality_reduction/xenium_{seg}/{sample_id}/  cell_boundaries_mask.tif, cell_ids.csv (10x's cells as a label mask)
   snkmt.db                                          run monitoring database
 ```
 
@@ -146,17 +148,37 @@ Some rules run on the `gpu` partition:  (set `gpu: available: false` in the conf
 | `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/). When on, all later steps read the subtracted image |
 | `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Nucleus / whole-cell / cytoplasm masks for each method in `segmentation: methods`: Mesmer (deepcell, through SPACEc) and/or Cellpose 3 (through SPACEc: `nuclei` model on the nuclear signal, `cyto3` on membrane + nuclear, diameters set in µm) and/or VirTues (see below; whole cells only); per-cell area, centroid and mean intensity of **every** channel; masks as GeoJSON (e.g. for QuPath) |
 | `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Affine registration of the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy); cells matched to Xenium cells (mutual nearest neighbours), overlay and count plots. Only for samples with a Xenium run |
-| `cell_type_annotation` | `tacit_{seg_method}`, `virtues_cell_types_{seg_method}`, `tacit_xenium`, `virtues_cell_types_xenium` | Cell types of every segmentation method's cells for each method in `cell_type_annotation: methods`: TACIT (marker signatures, `signatures/{panel}.csv`) and/or VirTues (majority class of each cell's pixels in VirTues' class map). Samples imaged on Xenium also get cell types for 10x's own cells (`cell_type_annotation: xenium_segmentation`) |
+| `cell_type_annotation` | `tacit_{seg_method}`, `tacit_xenium` | Cell types of every segmentation method's cells for each method in `cell_type_annotation: methods`: TACIT (marker signatures, `signatures/{panel}.csv`). Samples imaged on Xenium also get cell types for 10x's own cells (`cell_type_annotation: xenium_segmentation`) |
+| `dimensionality_reduction` | `{dr_method}_embeddings_{seg_method}`, `xenium_cell_mask`, `{dr_method}_embeddings_xenium` | Per-cell embeddings of every segmentation method's cells for each method in `dimensionality_reduction: methods`: VirTues (see below; needs `virtues` in `segmentation: methods`) and/or KRONOS2 (see below). Samples imaged on Xenium also embed 10x's own cells, exported as a label mask first |
 
 **VirTues** ([bunnelab/virtues](https://github.com/bunnelab/virtues), `gpu` environment, A100 GPU): a
 foundation model that reads any panel, identifying each channel by the ESM-2 embedding of its protein
 (`virtues/{panel}.csv` next to the dataset config: `channel_name, uniprot_id`, blank = not used; DAPI
 as Histone H3 P68431). The mapped channels are resampled to 1 µm/px, clipped at their 99th percentile
-in the tissue, log1p-transformed and z-scored with the panel's mean / std (spora's standardization);
-the segmentation head then predicts whole cells and, for every pixel, one of 9 classes: 7 cell types
-(B cell, CD4 T, CD8 T, Fibroblasts / Stroma, Myeloid, Tumor, Vessel / Endo.), None (background) and
-Unknown. The class map labels the cells
-of every mask; the VirTues cell mask is upsampled to the image's pixel grid like the other methods'.
+in the tissue, log1p-transformed, z-scored with the panel's mean / std (spora's standardization) and
+blurred (3 x 3 Gaussian). The segmentation head then predicts whole cells; the VirTues cell mask is
+upsampled to the image's pixel grid like the other methods'. Cell embeddings follow VirTues' cell
+tokens: the backbone embeds 128 px crops (stride 42, image zero-padded by 120 px) into one 512-d token
+per 8 x 8 px patch, and each cell gets the mean of the tokens it overlaps, weighted by its number of
+1 µm pixels in each patch. Masks are brought to 1 µm by centre sampling (each 1 µm pixel takes the
+label of the full-resolution pixel at its centre); cells covering no pixel centre (slivers under ~1 µm²)
+get no embedding. The sums are accumulated crop by crop, as VirTues' own `compute_cell_tokens` runs
+out of memory on whole slides.
+
+**KRONOS2** ([MahmoodLab/KRONOS2](https://huggingface.co/MahmoodLab/KRONOS2), gated, CC BY-NC-ND 4.0;
+`gpu` environment): a marker-aware ViT that identifies each channel by its own marker name
+(`kronos2/{panel}.csv` next to the dataset config: `channel_name, kronos2_marker`, blank = not used; the
+names are those of `marker_metadata.csv` in the model folder, an unknown name stops the run). Cell
+embeddings follow the cell recipe of [CORAL](https://github.com/mahmoodlab/CORAL), at the image's native
+resolution: a `box_size` px box (64) around each cell's rounded centroid, pixels outside the cell set to 0,
+divided by the dtype maximum, z-scored with KRONOS2's pretraining statistics; the embedding is the 768-d
+CLS token. The rules load the model from a local copy (`dimensionality_reduction: kronos2: model_dir`) and
+need no token. Download it once, after requesting access on Hugging Face:
+```bash
+export CONDA_OVERRIDE_CUDA=12.9
+pixi run -e gpu hf auth login    # read token
+pixi run -e gpu hf download MahmoodLab/KRONOS2 --exclude "demo_image/*" --local-dir <model_dir>
+```
 
 A switched-off step is not loaded: later steps read its existing outputs as plain input files, so it
 is never re-run (Snakemake stops with a missing input error if they do not exist yet). Background
