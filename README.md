@@ -93,7 +93,9 @@ NSCLC:
 
 The nuclear and membrane signals given to the segmentation methods are each the per-pixel maximum of their channels
 (raw values), after removing every channel's pixel value offset read from the OME metadata (+100 on
-Xenium protein channels, 0 for DAPI, stains and formats without one).
+Xenium protein channels, 0 for DAPI, stains and formats without one). Values below the offset are kept negative
+(float32 segmentation input), as in the per-cell mean intensities and the KRONOS2 embeddings; only VirTues clips
+them at 0.
 
 #### Creating / updating experiments.yml
 
@@ -170,8 +172,8 @@ out of memory on whole slides.
 (`kronos2/{panel}.csv` next to the dataset config: `channel_name, kronos2_marker`, blank = not used; the
 names are those of `marker_metadata.csv` in the model folder, an unknown name stops the run). Cell
 embeddings follow the cell recipe of [CORAL](https://github.com/mahmoodlab/CORAL), at the image's native
-resolution: a `box_size` px box (64) around each cell's rounded centroid, pixels outside the cell set to 0,
-divided by the dtype maximum, z-scored with KRONOS2's pretraining statistics; the embedding is the 768-d
+resolution: a `box_size` px box (64) around each cell's rounded centroid, pixel value offset removed in float
+(values below it stay negative), pixels outside the cell set to 0, divided by the dtype maximum, z-scored with KRONOS2's pretraining statistics; the embedding is the 768-d
 CLS token. The rules load the model from a local copy (`dimensionality_reduction: kronos2: model_dir`) and
 need no token. Download it once, after requesting access on Hugging Face:
 ```bash

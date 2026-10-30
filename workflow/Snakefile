@@ -114,6 +114,13 @@ def xenium_run_dir(sample_id):
     return None
 
 
+def xenium_qc_mask(wildcards):
+    """Xenium saturation QC masks (first file of the multi-file OME-TIFF); [] for other technologies."""
+    if SAMPLES[wildcards.sample_id]["panel_meta"]["technology"] != "xenium":
+        return []
+    return xenium_run_dir(wildcards.sample_id) + "/aux_outputs/morphology_focus_qc_masks/ch0000_dapi.ome.tif"
+
+
 # Xenium segmentation whose cells also get cell types and embeddings (config cell_type_annotation: xenium_segmentation)
 XENIUM_CT_SEG = config["cell_type_annotation"].get("xenium_segmentation", "10x_mm_5um")
 

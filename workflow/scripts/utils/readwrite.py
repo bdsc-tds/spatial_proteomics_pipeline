@@ -75,16 +75,23 @@ class MultiplexImage:
             raise KeyError(f"{self.path}: no channel {name!r}; channels are {self.channel_names}")
         return self.channel_names.index(name)
 
-    def read_channel(self, channel, maxworkers=None, subtract_offset=False):
+    def read_channel(self, channel, maxworkers=None, subtract_offset=False, keep_negative=False):
         """One full-resolution channel plane (Y, X), by index or name.
 
         subtract_offset: remove the channel's pixel value offset (channel_offsets), clipping at 0.
+        keep_negative: with subtract_offset, return the plane as float32 (every channel, offset or not) so that
+                       values below the offset stay negative instead of being clipped.
         """
         c = self.channel_index(channel) if isinstance(channel, str) else channel
         # each channel is one TIFF page, so only that plane is read from disk
         plane = self._level.pages[c].asarray(maxworkers=maxworkers)
-        # in place, so no second plane is allocated: raise values below the offset to it, then subtract
         offset = self.channel_offsets[c]
+        # in float, so values below the offset stay negative
+        if subtract_offset and keep_negative:
+            plane = plane.astype(np.float32)
+            plane -= offset
+            return plane
+        # in place, so no second plane is allocated: raise values below the offset to it, then subtract
         if subtract_offset and offset:
             np.maximum(plane, offset, out=plane)
             plane -= np.asarray(offset, dtype=plane.dtype)

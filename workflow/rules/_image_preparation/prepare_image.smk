@@ -61,7 +61,7 @@ rule prepare_segmentation_input:
     resources:
         # one full-resolution channel plane (up to ~24k x 24k uint16) in memory at a time
         runtime=60,
-        mem='24G',
+        mem='40G',
     log:
         image_preparation_dir + "logs/prepare_segmentation_input.log"
     container:

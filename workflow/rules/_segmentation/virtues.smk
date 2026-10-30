@@ -141,7 +141,7 @@ rule segmentation_virtues:
     threads: 1
     resources:
         runtime=240,
-        mem='150G',
+        mem='250G',
         partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

@@ -7,6 +7,7 @@
 # panel_meta:   defined in Snakefile
 # SEG_METHODS:  defined in Snakefile
 # SAMPLE_IDS:   defined in Snakefile
+# xenium_qc_mask: defined in Snakefile
 
 # area, centroid and mean intensity of every channel per cell
 rule quantify_cells_mesmer:
@@ -15,10 +16,14 @@ rule quantify_cells_mesmer:
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
         mask=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.tif",
+        # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
+        qc_mask=xenium_qc_mask,
     output:
         feature_table=OUT + "/segmentation/mesmer/{sample_id}/feature_table.csv",
     params:
         pixel_size=lambda wc: panel_meta(wc)["pixel_size_um"],
+        # Xenium only: QC-flagged pixels are left out of the mean
+        qc_mask=lambda wc: f"--qc_mask {xenium_qc_mask(wc)}" if xenium_qc_mask(wc) else "",
     threads: 1
     resources:
         # one channel plane and one mask row block in memory at a time
@@ -35,6 +40,7 @@ rule quantify_cells_mesmer:
         --mask {input.mask} \
         --pixel_size_fallback {params.pixel_size} \
         --out_csv {output.feature_table} \
+        {params.qc_mask} \
         --threads {threads} \
         &> {log}
         """
@@ -45,6 +51,8 @@ use rule quantify_cells_mesmer as quantify_cells_cellpose with:
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
         mask=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.tif",
+        # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
+        qc_mask=xenium_qc_mask,
     output:
         feature_table=OUT + "/segmentation/cellpose/{sample_id}/feature_table.csv",
     log:
@@ -57,6 +65,8 @@ use rule quantify_cells_mesmer as quantify_cells_virtues with:
         image=source_image,
         # from segmentation_virtues
         mask=OUT + "/segmentation/virtues/{sample_id}/cell_boundaries_mask.tif",
+        # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
+        qc_mask=xenium_qc_mask,
     output:
         feature_table=OUT + "/segmentation/virtues/{sample_id}/feature_table.csv",
     log:

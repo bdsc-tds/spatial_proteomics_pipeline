@@ -1,9 +1,10 @@
 """Write one sample's two-channel segmentation input.
 
 Reads the raw (or background-subtracted) multiplexed image one channel at a time and writes:
-  - segmentation_input.ome.tif: two channels, "nuclear" and "membrane" (Mesmer/Cellpose input), each
+  - segmentation_input.ome.tif: two float32 channels, "nuclear" and "membrane" (Mesmer/Cellpose input), each
                                 the per-pixel maximum of its channels after removing every channel's
-                                pixel value offset (e.g. +100 on Xenium protein channels; 0 elsewhere)
+                                pixel value offset (e.g. +100 on Xenium protein channels; 0 elsewhere), values
+                                below the offset kept negative (both models rescale their input themselves)
 Fails if the configured nuclear or membrane channels are missing from the image.
 """
 
@@ -31,10 +32,11 @@ def parse_args():
 
 
 def max_projection(img, channels, threads):
-    """Per-pixel maximum of the given channels, offsets removed, holding at most two planes in memory."""
+    """Per-pixel maximum of the given channels, offsets removed (float32, values below them negative), holding at
+    most two planes in memory."""
     combined = None
     for c in channels:
-        plane = img.read_channel(c, threads, subtract_offset=True)
+        plane = img.read_channel(c, threads, subtract_offset=True, keep_negative=True)
         print(f"  {c} (offset {img.channel_offsets[img.channel_index(c)]} removed)")
         # first channel starts the projection, the others are folded in place
         if combined is None:
@@ -69,7 +71,7 @@ def main():
                 yield max_projection(img, channels, args.threads)
 
         write_ome_tiff(args.out_segmentation_input, projections(), shape=(len(groups),) + img.shape[1:],
-                       dtype=img.dtype, channel_names=list(groups), pixel_size_um=pixel_size)
+                       dtype=np.float32, channel_names=list(groups), pixel_size_um=pixel_size)
         print(f"written: {args.out_segmentation_input} ({', '.join(groups)})")
 
 
