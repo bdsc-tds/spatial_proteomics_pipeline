@@ -42,7 +42,7 @@ rule kronos2_embeddings_mesmer:
         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
         qc_mask=xenium_qc_mask,
     output:
-        embeddings=OUT + "/dimensionality_reduction/kronos2/mesmer/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/kronos2/mesmer/{sample_id}/cell_embeddings.h5",
     params:
         model_dir=KRONOS2["model_dir"],
         box_size=KRONOS2["box_size"],
@@ -69,7 +69,7 @@ rule kronos2_embeddings_mesmer:
         --model_dir {params.model_dir} \
         --box_size {params.box_size} \
         {params.qc_mask} \
-        --out_npz {output.embeddings} \
+        --out_h5 {output.embeddings} \
         &> {log}
         """
 
@@ -84,7 +84,7 @@ use rule kronos2_embeddings_mesmer as kronos2_embeddings_cellpose with:
         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
         qc_mask=xenium_qc_mask,
     output:
-        embeddings=OUT + "/dimensionality_reduction/kronos2/cellpose/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/kronos2/cellpose/{sample_id}/cell_embeddings.h5",
     log:
         OUT + "/dimensionality_reduction/kronos2/cellpose/{sample_id}/logs/kronos2_embeddings.log"
 
@@ -100,7 +100,7 @@ use rule kronos2_embeddings_mesmer as kronos2_embeddings_cellpose with:
 #         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
 #         qc_mask=xenium_qc_mask,
 #     output:
-#         embeddings=OUT + "/dimensionality_reduction/kronos2/virtues/{sample_id}/cell_embeddings.npz",
+#         embeddings=OUT + "/dimensionality_reduction/kronos2/virtues/{sample_id}/cell_embeddings.h5",
 #     log:
 #         OUT + "/dimensionality_reduction/kronos2/virtues/{sample_id}/logs/kronos2_embeddings.log"
 
@@ -116,7 +116,7 @@ use rule kronos2_embeddings_mesmer as kronos2_embeddings_xenium with:
         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
         qc_mask=xenium_qc_mask,
     output:
-        embeddings=OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
     params:
         model_dir=KRONOS2["model_dir"],
         box_size=KRONOS2["box_size"],
@@ -129,7 +129,7 @@ use rule kronos2_embeddings_mesmer as kronos2_embeddings_xenium with:
 # (samples imaged on Xenium)
 rule kronos2_embeddings_all:
     input:
-        expand(OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.npz",
+        expand(OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5",
                seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=SAMPLE_IDS),
-        expand(OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.npz",
+        expand(OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
                sample_id=XENIUM_MASK_SAMPLE_IDS),

@@ -12,8 +12,8 @@ The only difference to compute_cell_tokens, which cannot run on a whole slide (i
 once and keeps one token reference per (cell, patch, crop) in CPU RAM): the weighted sums are accumulated one
 batch of crops at a time, in (cells, 512) arrays on the GPU.
 
-Writes cell_embeddings.npz: cell_id (mask label, or the 10x cell_id of --cell_ids) and embedding (cells x 512,
-float32), in mask label order.
+Writes cell_embeddings.h5: cell_id (mask label, or the 10x cell_id of --cell_ids) and embedding (cells x 512,
+float32, gzip), in mask label order; the model and crop / blur settings as file attributes.
 """
 
 import argparse
@@ -21,6 +21,7 @@ import os
 import sys
 import time
 
+import h5py
 import numpy as np
 import pandas as pd
 import tifffile
@@ -48,7 +49,7 @@ def parse_args():
     parser.add_argument("--tile_size", type=int, default=128)
     parser.add_argument("--stride", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--out_npz", required=True)
+    parser.add_argument("--out_h5", required=True)
     return parser.parse_args()
 
 
@@ -155,8 +156,16 @@ def main():
         cell_id = table.reindex(labels).fillna(pd.Series(labels.astype(str), index=labels)).to_numpy(str)
         print(f"{np.isin(labels, table.index).sum()} of {len(labels)} labels in {args.cell_ids}", flush=True)
 
-    np.savez(args.out_npz, cell_id=cell_id, embedding=cell_tokens.astype(np.float32))
-    print(f"written: {args.out_npz} ({len(labels)} cells x {cell_tokens.shape[1]})")
+    # cell ids (10x cell_ids as UTF-8 strings), embeddings and the recipe settings as HDF5
+    with h5py.File(args.out_h5, "w") as f:
+        if cell_id.dtype.kind == "U":
+            f.create_dataset("cell_id", data=cell_id.astype(object), dtype=h5py.string_dtype())
+        else:
+            f.create_dataset("cell_id", data=cell_id.astype(np.int64))
+        f.create_dataset("embedding", data=cell_tokens.astype(np.float32), compression="gzip", chunks=True)
+        f.attrs.update({"model": args.model, "tile_size": args.tile_size, "stride": args.stride, "pad": args.pad,
+                        "blur_sigma": args.blur_sigma})
+    print(f"written: {args.out_h5} ({len(labels)} cells x {cell_tokens.shape[1]})")
 
 
 if __name__ == "__main__":

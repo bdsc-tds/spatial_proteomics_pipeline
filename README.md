@@ -31,11 +31,11 @@ processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
   segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose, virtues)
-  segmentation/virtues/{sample_id}/                 + channel_stats.csv (cell mask only, no nuclei / cytoplasm)
+  segmentation/virtues/{sample_id}/                 + image_1um.npy, channel_stats.csv (cell mask only, no nuclei / cytoplasm)
   segmentation/virtues/panels/{panel}/              marker_embeddings.pt, standardization.csv
   xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
   cell_type_annotation/{ct_method}/{seg_method}/{sample_id}/  cell_types.csv, logs/  (tacit; also xenium_{seg} for 10x's cells)
-  dimensionality_reduction/{dr_method}/{seg_method}/{sample_id}/  cell_embeddings.npz, logs/  (virtues, kronos2; also xenium_{seg} for 10x's cells)
+  dimensionality_reduction/{dr_method}/{seg_method}/{sample_id}/  cell_embeddings.h5, logs/  (virtues, kronos2; also xenium_{seg} for 10x's cells)
   dimensionality_reduction/xenium_{seg}/{sample_id}/  cell_boundaries_mask.tif, cell_ids.csv (10x's cells as a label mask)
   snkmt.db                                          run monitoring database
 ```

@@ -162,6 +162,8 @@ scikit-image = "*"
 tifffile = "*"
 imagecodecs = "*"
 zarr = ">=3"
+# cell embeddings are written as HDF5
+h5py = ">=3.16.0,<4"
 loguru = "*"
 # imported at module level by instanseg (VirTues' segmentation head), but only an optional extra of instanseg-torch
 seaborn = "*"

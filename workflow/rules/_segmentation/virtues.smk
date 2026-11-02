@@ -67,7 +67,7 @@ rule virtues_prepare_image:
         image=source_image,
         markers=lambda wc: virtues_markers(SAMPLES[wc.sample_id]["panel"]),
     output:
-        image=temp(virtues_dir + "image_1um.npy"),
+        image=virtues_dir + "image_1um.npy",
         stats=virtues_dir + "channel_stats.csv",
     params:
         pixel_size=lambda wc: panel_meta(wc)["pixel_size_um"],

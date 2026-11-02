@@ -34,7 +34,7 @@ rule virtues_embeddings_mesmer:
         # from segmentation_mesmer
         mask=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.tif",
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/mesmer/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/virtues/mesmer/{sample_id}/cell_embeddings.h5",
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
@@ -63,7 +63,7 @@ rule virtues_embeddings_mesmer:
         --model_dir {params.model_dir} \
         --model {params.model} \
         --blur_sigma {params.blur_sigma} \
-        --out_npz {output.embeddings} \
+        --out_h5 {output.embeddings} \
         &> {log}
         """
 
@@ -81,7 +81,7 @@ use rule virtues_embeddings_mesmer as virtues_embeddings_cellpose with:
         # from segmentation_cellpose
         mask=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.tif",
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/cellpose/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/virtues/cellpose/{sample_id}/cell_embeddings.h5",
     log:
         OUT + "/dimensionality_reduction/virtues/cellpose/{sample_id}/logs/virtues_embeddings.log"
 
@@ -99,7 +99,7 @@ use rule virtues_embeddings_mesmer as virtues_embeddings_virtues with:
         # from segmentation_virtues
         mask=OUT + "/segmentation/virtues/{sample_id}/cell_boundaries_mask.tif",
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/virtues/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/virtues/virtues/{sample_id}/cell_embeddings.h5",
     log:
         OUT + "/dimensionality_reduction/virtues/virtues/{sample_id}/logs/virtues_embeddings.log"
 
@@ -118,7 +118,7 @@ use rule virtues_embeddings_mesmer as virtues_embeddings_xenium with:
         mask=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif",
         cell_ids=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv",
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.npz",
+        embeddings=OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
@@ -130,7 +130,7 @@ use rule virtues_embeddings_mesmer as virtues_embeddings_xenium with:
 # VirTues embeddings of every method in segmentation: methods, and of the Xenium cells (samples imaged on Xenium)
 rule virtues_embeddings_all:
     input:
-        expand(OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.npz",
+        expand(OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5",
                seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
-        expand(OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.npz",
+        expand(OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
                sample_id=XENIUM_MASK_SAMPLE_IDS),
