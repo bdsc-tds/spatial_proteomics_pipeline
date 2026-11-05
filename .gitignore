@@ -5,6 +5,10 @@
 # pixi environments (pixi.lock is tracked, it is baked into the container)
 .pixi/
 
+# CUDA JIT and fontconfig caches written to $HOME inside containers
+.nv/
+.fontconfig/
+
 # personal Claude Code settings
 .claude/settings.local.json
 **/misc
