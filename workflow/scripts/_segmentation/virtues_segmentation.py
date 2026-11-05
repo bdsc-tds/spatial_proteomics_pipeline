@@ -1,9 +1,11 @@
 """VirTues whole-cell segmentation, from the image prepared by virtues_prepare_image.py.
 
 Standardizes and blurs the 1 µm stack (virtues_utils.standardized_stack), runs the VirTues backbone with its
-segmentation head (Hugging Face bunnelab/virtues) tile by tile, and writes the whole-cell mask on the
-full-resolution pixel grid of the image (nearest neighbour from 1 µm), as a tiled TIFF like the other methods'
-masks (VirTues predicts no nuclei). The head's cell type logits are not used.
+segmentation head (Hugging Face bunnelab/virtues) tile by tile, and writes:
+- the whole-cell mask on the full-resolution pixel grid of the image (nearest neighbour from 1 µm), as a tiled
+  TIFF like the other methods' masks (VirTues predicts no nuclei);
+- the head's cell type logits of every 1 µm pixel (classes x Y x X, float16, tiled TIFF), all classes kept
+  (None and Unknown are suppressed later, by virtues_cell_types.py), and the class names (classes.csv).
 """
 
 import argparse
@@ -11,6 +13,8 @@ import os
 import sys
 
 import numpy as np
+import pandas as pd
+import tifffile
 import torch
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,9 +24,9 @@ from label_masks import write_label_mask
 from readwrite import MultiplexImage
 from virtues_utils import channel_ids, load_backbone, standardized_stack
 
-# cell type classes of the segmentation head (virtues notebooks/3_demo_segmentation.ipynb): only their number is
-# needed, to build the head that the weights fit
-N_HEAD_CLASSES = 9
+# cell type classes of the segmentation head, in logit order (virtues notebooks/3_demo_segmentation.ipynb)
+HEAD_CLASSES = ["None", "B cell", "CD4 T cell", "CD8 T cell", "Fibroblasts /Stroma", "Myeloid", "Tumor", "Unknown",
+                "Vessel / Endo."]
 # instance channels of the head, and fragments dropped from the instance mask (1 µm px, VirTues demo)
 HEAD_DIM_OUT = 5
 MIN_CELL_SIZE = 15
@@ -42,6 +46,8 @@ def parse_args():
     parser.add_argument("--overlap", type=int, default=32)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--out_cells", required=True)
+    parser.add_argument("--out_logits", required=True)
+    parser.add_argument("--out_classes", required=True)
     return parser.parse_args()
 
 
@@ -54,7 +60,7 @@ def load_model(embeddings, model_dir, model):
     backbone = load_backbone(embeddings, model_dir, model)
 
     # head: its file holds no backbone weights, so only virtues_model.* keys may be missing
-    head = VirtuesSegmentationHead(virtues_model=backbone, dim_out=HEAD_DIM_OUT, num_celltypes=N_HEAD_CLASSES)
+    head = VirtuesSegmentationHead(virtues_model=backbone, dim_out=HEAD_DIM_OUT, num_celltypes=len(HEAD_CLASSES))
     state = load_file(hf_hub_download("bunnelab/virtues", f"{model}/segmentation-head.safetensors", local_dir=model_dir))
     missing, unexpected = head.load_state_dict(state, strict=False)
 
@@ -77,12 +83,18 @@ def main():
     embeddings = torch.load(args.embeddings)
     ids = channel_ids(embeddings, channels)
 
-    # instance mask, tile by tile (VirTues stitches tissues larger than 1500 px itself); cell type logits dropped
+    # instance mask and cell type logits, tile by tile (VirTues stitches tissues larger than 1500 px itself)
     head = load_model(embeddings["embeddings"], args.model_dir, args.model)
     with torch.no_grad():
-        instances, _ = head.segment_tissue(torch.from_numpy(x).cuda(), ids.cuda(), tile_size=args.tile_size,
-                                           overlap=args.overlap, batch_size=args.batch_size)
+        instances, logits = head.segment_tissue(torch.from_numpy(x).cuda(), ids.cuda(), tile_size=args.tile_size,
+                                                overlap=args.overlap, batch_size=args.batch_size)
     del x
+
+    # cell type logits of every 1 µm pixel (all classes) and the class names
+    tifffile.imwrite(args.out_logits, logits.cpu().numpy().astype(np.float16), tile=(1024, 1024), compression="zlib")
+    del logits
+    pd.DataFrame({"class_index": range(len(HEAD_CLASSES)), "cell_type": HEAD_CLASSES}).to_csv(args.out_classes,
+                                                                                            index=False)
 
     # whole cells at 1 µm, small fragments dropped
     cells = remove_small_cells(instances.cpu().numpy(), min_cell_size=MIN_CELL_SIZE)

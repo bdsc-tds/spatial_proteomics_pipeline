@@ -120,7 +120,7 @@ rule virtues_standardization_stats:
         &> {log}
         """
 
-# VirTues + segmentation head: whole-cell mask on the image's pixel grid
+# VirTues + segmentation head: whole-cell mask on the image's pixel grid, and the head's cell type logits at 1 µm
 rule segmentation_virtues:
     input:
         script=f"{workflow.basedir}/scripts/_segmentation/virtues_segmentation.py",
@@ -134,6 +134,8 @@ rule segmentation_virtues:
         image=source_image,
     output:
         cells=virtues_dir + "cell_boundaries_mask.tif",
+        logits=virtues_dir + "class_logits.tif",
+        classes=virtues_dir + "classes.csv",
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
@@ -160,5 +162,7 @@ rule segmentation_virtues:
         --model {params.model} \
         --blur_sigma {params.blur_sigma} \
         --out_cells {output.cells} \
+        --out_logits {output.logits} \
+        --out_classes {output.classes} \
         &> {log}
         """
