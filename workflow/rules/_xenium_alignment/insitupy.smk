@@ -86,6 +86,7 @@ rule plot_alignment:
         matched_proteomics=xenium_alignment_dir + "figures/{seg_method}/matched_spatial_proteomics.png",
         counts=xenium_alignment_dir + "figures/{seg_method}/counts.png",
         counts_table=xenium_alignment_dir + "figures/{seg_method}/counts.csv", # written by savefig_plotnine
+        fraction_matched=xenium_alignment_dir + "figures/{seg_method}/fraction_matched.png",
     params:
         xenium_dir=xenium_dir,
         # name=output dir of each other Xenium segmentation
@@ -112,6 +113,7 @@ rule plot_alignment:
         --out_matched_xenium {output.matched_xenium} \
         --out_matched_proteomics {output.matched_proteomics} \
         --out_counts {output.counts} \
+        --out_fraction_matched {output.fraction_matched} \
         &> {log}
         """
 
