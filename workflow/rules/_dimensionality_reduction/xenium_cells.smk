@@ -3,14 +3,14 @@
 
 # variables defined in other .smk files:
 # os:                imported in Snakefile
-# SAMPLE_IDS:        defined in Snakefile
+# DR_SAMPLE_IDS:     defined in Snakefile
 # SAMPLES:           defined in Snakefile
 # xenium_ct_seg_dir: defined in Snakefile
 # OUT:               defined in Snakefile
 # XENIUM_CT_SEG:     defined in Snakefile
 
 # samples imaged on Xenium (technology xenium) whose run has the XENIUM_CT_SEG segmentation (xenium_ct_seg_dir: Snakefile)
-XENIUM_MASK_SAMPLE_IDS = [s for s in SAMPLE_IDS
+XENIUM_MASK_SAMPLE_IDS = [s for s in DR_SAMPLE_IDS
                           if SAMPLES[s]["panel_meta"]["technology"] == "xenium" and xenium_ct_seg_dir(s)]
 
 # cell label mask (tiled TIFF) and label -> 10x cell_id table of one sample

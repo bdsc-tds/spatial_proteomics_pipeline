@@ -7,6 +7,7 @@
 # panel_meta:   defined in Snakefile
 # SEG_METHODS:  defined in Snakefile
 # SAMPLE_IDS:   defined in Snakefile
+# seg_sample_ids: defined in Snakefile
 # xenium_qc_mask: defined in Snakefile
 
 # area, centroid and mean intensity of every channel per cell
@@ -134,10 +135,10 @@ rule mask_to_geojson_virtues:
 # outputs of every method in segmentation: methods (VirTues: no nuclei / cytoplasm)
 rule segmentation_all:
     input:
-        expand(OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
-               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
-        expand(OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries.geojson",
-               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
+        [expand(OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
+                seg_method=m, sample_id=seg_sample_ids(m)) for m in SEG_METHODS],
+        [expand(OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries.geojson",
+                seg_method=m, sample_id=seg_sample_ids(m)) for m in SEG_METHODS],
         expand(OUT + "/segmentation/{seg_method}/{sample_id}/{compartment}_boundaries.geojson",
                seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=SAMPLE_IDS,
                compartment=["nuclei", "cytoplasm"]),

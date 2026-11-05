@@ -7,6 +7,7 @@
 # CONFIG_PATH:            defined in Snakefile
 # SAMPLES:                defined in Snakefile
 # SAMPLE_IDS:             defined in Snakefile
+# DR_SAMPLE_IDS:          defined in Snakefile
 # source_image:           defined in Snakefile
 # xenium_qc_mask:         defined in Snakefile
 # OUT:                    defined in Snakefile
@@ -51,7 +52,7 @@ rule kronos2_embeddings_mesmer:
         qc_mask=lambda wc: f"--qc_mask {xenium_qc_mask(wc)}" if xenium_qc_mask(wc) else "",
     threads: 1
     resources:
-        runtime=240,
+        runtime=480,
         mem='64G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
@@ -130,6 +131,6 @@ use rule kronos2_embeddings_mesmer as kronos2_embeddings_xenium with:
 rule kronos2_embeddings_all:
     input:
         expand(OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5",
-               seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=SAMPLE_IDS),
+               seg_method=[m for m in SEG_METHODS if m != "virtues"], sample_id=DR_SAMPLE_IDS),
         expand(OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
                sample_id=XENIUM_MASK_SAMPLE_IDS),

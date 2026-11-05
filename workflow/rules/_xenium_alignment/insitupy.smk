@@ -11,6 +11,7 @@
 # SEG_METHODS:          defined in Snakefile
 # EXPERIMENTS_PATH:     defined in Snakefile
 # ALIGN_METHODS:        defined in xenium_alignment.smk
+# seg_sample_ids:       defined in Snakefile
 
 # {max_width}: px size of the shrunk copies used for feature matching, one folder per value
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
@@ -126,8 +127,9 @@ SUMMARY_XENIUM_SEGS = [config["xenium_alignment"]["xenium_segmentation"], "prose
 rule plot_alignment_summary:
     input:
         script=f"{workflow.basedir}/scripts/_xenium_alignment/plot_alignment_summary.py",
-        counts=expand(rules.plot_alignment.output.counts_table, max_width=ALIGN_MAX_WIDTHS, seg_method=SEG_METHODS,
-                      sample_id=XENIUM_SAMPLE_IDS, allow_missing=True),
+        counts=[expand(rules.plot_alignment.output.counts_table, max_width=ALIGN_MAX_WIDTHS, seg_method=m,
+                       sample_id=[s for s in XENIUM_SAMPLE_IDS if s in seg_sample_ids(m)], allow_missing=True)
+                for m in SEG_METHODS],
     output:
         table=xenium_alignment_summary_dir + "fraction_matched.csv",
         # one per Xenium segmentation / proteomics segmentation, file names set in the script
@@ -173,6 +175,6 @@ rule xenium_alignment_all:
     input:
         expand(xenium_alignment_dir + "affine_matrix.csv", align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
                sample_id=XENIUM_SAMPLE_IDS),
-        expand(rules.plot_alignment.output, align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
-               seg_method=SEG_METHODS, sample_id=XENIUM_SAMPLE_IDS),
+        [expand(rules.plot_alignment.output, align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
+                seg_method=m, sample_id=[s for s in XENIUM_SAMPLE_IDS if s in seg_sample_ids(m)]) for m in SEG_METHODS],
         expand(rules.plot_alignment_summary.output, align_method=ALIGN_METHODS),
