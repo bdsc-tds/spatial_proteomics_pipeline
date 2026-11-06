@@ -1,5 +1,5 @@
 # VirTues cell types of the VirTues mask: the majority class of every cell's 1 µm pixels in the segmentation
-# head's cell type logits (None / Unknown suppressed, as VirTues' segmentation demo)
+# head's cell type logits (None suppressed; Unknown kept as a cell type, unlike VirTues' segmentation demo)
 
 # variables defined in other .smk files:
 # OUT:                defined in Snakefile

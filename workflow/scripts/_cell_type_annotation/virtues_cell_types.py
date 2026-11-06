@@ -1,8 +1,9 @@
 """VirTues cell type of every cell of the VirTues mask, from the segmentation head's cell type logits.
 
-Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb): the None and Unknown logits are
-suppressed, every 1 µm pixel takes its most likely remaining class, and every cell takes the majority class of
-its pixels (virtues.utils.segmentation.assign_cell_types). The mask is brought to the logits' 1 µm grid as in
+Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that only the None
+(background) logit is suppressed and Unknown is kept as a cell type: every 1 µm pixel takes its most likely
+remaining class, and every cell takes the majority class of its pixels
+(virtues.utils.segmentation.assign_cell_types). The mask is brought to the logits' 1 µm grid as in
 virtues_embeddings.py, by centre sampling (each 1 µm pixel takes the label of the full-resolution pixel at its
 centre); cells covering no 1 µm pixel centre get no cell type.
 
@@ -16,8 +17,8 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-# classes the demo suppresses before the argmax
-SUPPRESSED = ["None", "Unknown"]
+# classes suppressed before the argmax: the background class only (the demo also suppresses Unknown)
+SUPPRESSED = ["None"]
 
 
 def parse_args():
@@ -39,7 +40,7 @@ def centre_sample(mask, height_1um, width_1um):
 def main():
     args = parse_args()
 
-    # logits and the classes kept (None / Unknown suppressed); keep_default_na=False keeps "None" a string
+    # logits and the classes kept (None suppressed); keep_default_na=False keeps "None" a string
     logits = tifffile.imread(args.logits)
     classes = pd.read_csv(args.classes, keep_default_na=False).sort_values("class_index")
     keep = classes.loc[~classes["cell_type"].isin(SUPPRESSED), "class_index"].to_numpy()
