@@ -1,6 +1,13 @@
 # Channel table, DAPI image and segmentation input of each sample (from qptiff / OME-TIFF).
 # Two rules so that changing the segmentation markers does not re-run the DAPI (and the Xenium alignment)
 
+# variables defined in other .smk files:
+# OUT:          defined in Snakefile
+# source_image: defined in Snakefile
+# shell_list:   defined in Snakefile
+# panel_meta:   defined in Snakefile
+# SAMPLE_IDS:   defined in Snakefile
+
 image_preparation_dir = OUT + "/image_preparation/{sample_id}/"
 
 # channel table + first nuclear channel alone, for the alignment to Xenium
@@ -54,7 +61,7 @@ rule prepare_segmentation_input:
     resources:
         # one full-resolution channel plane (up to ~24k x 24k uint16) in memory at a time
         runtime=60,
-        mem='24G',
+        mem='40G',
     log:
         image_preparation_dir + "logs/prepare_segmentation_input.log"
     container:

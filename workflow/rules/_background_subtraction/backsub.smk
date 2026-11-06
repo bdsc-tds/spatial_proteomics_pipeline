@@ -1,5 +1,12 @@
 # Subtract the autofluorescence background channels from the raw image with backsub (COMET)
 
+# variables defined in other .smk files:
+# OUT:                        defined in Snakefile
+# SAMPLES:                    defined in Snakefile
+# BACKSUB_IMAGE:              defined in Snakefile
+# SAMPLE_IDS:                 defined in Snakefile
+# use_background_subtraction: defined in Snakefile
+
 background_subtraction_dir = OUT + "/background_subtraction/{sample_id}/"
 
 rule background_subtraction:

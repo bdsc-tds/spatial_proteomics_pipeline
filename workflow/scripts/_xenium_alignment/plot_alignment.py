@@ -10,6 +10,7 @@ the same as those of read_xenium_proteomics_sample there. Writes:
   - per modality (Xenium, aligned proteomics), the matched and the unmatched cells side by side
   - a bar plot of the number of cells of each Xenium segmentation (--xenium_segs, then the default
     10x_mm_5um one), of proteomics, matched and unmatched proteomics cells
+  - a stacked bar of the fraction of proteomics cells matched / unmatched to a Xenium cell
 """
 
 import argparse
@@ -25,8 +26,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 import anndata as ad
 import squidpy as sq
-from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggplot, scale_fill_manual,
-                      scale_y_continuous, theme, theme_classic, xlab, ylab)
+from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggplot, ggtitle, position_stack,
+                      scale_fill_manual, scale_y_continuous, theme, theme_classic, xlab, ylab)
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
@@ -49,6 +50,7 @@ def parse_args():
     parser.add_argument("--out_matched_xenium", required=True)
     parser.add_argument("--out_matched_proteomics", required=True)
     parser.add_argument("--out_counts", required=True)
+    parser.add_argument("--out_fraction_matched", required=True)
     return parser.parse_args()
 
 
@@ -198,7 +200,32 @@ def main():
         + ylab("Number of cells")
     )
     savefig_plotnine(p, counts, args.out_counts)
-    print(f"written: {args.out_matches}, {args.out_overlay}, {args.out_counts}")
+
+    # fraction of proteomics cells matched / unmatched to a Xenium cell, one stacked bar
+    fractions = pd.DataFrame({
+        "cells": "proteomics",
+        "status": pd.Categorical(["unmatched", "matched"], categories=["unmatched", "matched"]),
+        "ncells": [len(cells) - len(matches), len(matches)],
+    })
+    fractions["fraction"] = fractions["ncells"] / len(cells)
+    fractions["label"] = [f"{f:.1%}\n({n:,})" for f, n in zip(fractions["fraction"], fractions["ncells"])]
+    p = (
+        ggplot(fractions, aes(x="cells", y="fraction", fill="status"))
+        + geom_col(position="stack", width=0.8)
+        + geom_text(aes(label="label"), position=position_stack(vjust=0.5), size=7, color="white")
+        + theme_classic()
+        + theme(panel_border=element_rect(fill=None, color="black"),
+                text=element_text(font="Helvetica"),
+                axis_text_x=element_text(color="black"),
+                figure_size=(3, 4))
+        + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1), labels=lambda v: [f"{x:.0%}" for x in v])
+        + scale_fill_manual(values={"matched": "#2166AC", "unmatched": "#E66101"})
+        + ggtitle(args.sample_id)
+        + xlab("")
+        + ylab("Fraction of cells matched to Xenium")
+    )
+    savefig_plotnine(p, fractions, args.out_fraction_matched)
+    print(f"written: {args.out_matches}, {args.out_overlay}, {args.out_counts}, {args.out_fraction_matched}")
 
 
 if __name__ == "__main__":

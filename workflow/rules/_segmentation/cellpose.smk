@@ -1,6 +1,11 @@
 # Cellpose 3 (via SPACEc) masks: nuclear model on the nuclear signal, cell model on membrane + nuclear.
 # Quantified in quantify_cells.smk
 
+# variables defined in other .smk files:
+# OUT:           defined in Snakefile
+# GPU_PARTITION: defined in Snakefile
+# GPU_EXTRA:     defined in Snakefile
+
 cellpose_dir = OUT + "/segmentation/cellpose/{sample_id}/"
 
 rule segmentation_cellpose:

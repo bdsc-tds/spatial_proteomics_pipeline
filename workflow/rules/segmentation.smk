@@ -1,6 +1,9 @@
 ### --- Segmentation: masks per method, per-cell quantification, GeoJSON ---
 # one rule file per method, included only if listed in config segmentation: methods (SEG_METHODS: Snakefile)
 
+# variables defined in other .smk files:
+# SEG_METHODS: defined in Snakefile
+
 # --- Rules ---
 for _seg_method in SEG_METHODS:
     include: f"_segmentation/{_seg_method}.smk"

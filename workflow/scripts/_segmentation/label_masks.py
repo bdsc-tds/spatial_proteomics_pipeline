@@ -9,6 +9,15 @@ import numpy as np
 import tifffile
 
 
+def write_label_mask(path, mask):
+    """Write one int32 label mask as a tiled, deflate-compressed TIFF and print its number of labels."""
+    # 1024 px tiles, deflate (no predictor, which compresses label masks worse)
+    tifffile.imwrite(path, mask.astype(np.int32, copy=False), tile=(1024, 1024), compression="zlib", bigtiff=True)
+    # count labels without np.unique, which would sort a copy of the whole mask
+    n_labels = np.count_nonzero(np.bincount(mask.ravel())[1:])
+    print(f"written: {path} ({n_labels} labels)")
+
+
 def save_label_masks(cells, in_nucleus, out_cells, out_nuclei, out_cytoplasm):
     """Save the cell mask and the nuclei / cytoplasm masks relabelled with the id of their cell.
 
@@ -25,9 +34,5 @@ def save_label_masks(cells, in_nucleus, out_cells, out_nuclei, out_cytoplasm):
     }
     for path, make_mask in derived.items():
         mask = make_mask()
-        # 1024 px tiles, deflate (no predictor, which compresses label masks worse)
-        tifffile.imwrite(path, mask, tile=(1024, 1024), compression="zlib", bigtiff=True)
-        # count labels without np.unique, which would sort a copy of the whole mask
-        n_labels = np.count_nonzero(np.bincount(mask.ravel())[1:])
-        print(f"written: {path} ({n_labels} labels)")
+        write_label_mask(path, mask)
         del mask

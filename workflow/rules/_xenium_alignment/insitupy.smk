@@ -1,6 +1,17 @@
 # Register the proteomics DAPI onto the Xenium DAPI with insitupy, then match cells and plot per
 # segmentation method. Samples with a Xenium run only. SEG_METHODS: Snakefile
 
+# variables defined in other .smk files:
+# os:                   imported in Snakefile
+# OUT:                  defined in Snakefile
+# SAMPLES:              defined in Snakefile
+# xenium_segmentations: imported in Snakefile (experiments.py)
+# XENIUM_SAMPLE_IDS:    defined in Snakefile
+# ALIGN_MAX_WIDTHS:     defined in xenium_alignment.smk
+# SEG_METHODS:          defined in Snakefile
+# EXPERIMENTS_PATH:     defined in Snakefile
+# ALIGN_METHODS:        defined in xenium_alignment.smk
+
 # {max_width}: px size of the shrunk copies used for feature matching, one folder per value
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
 insitupy_dir = OUT + "/xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/"
@@ -75,6 +86,7 @@ rule plot_alignment:
         matched_proteomics=xenium_alignment_dir + "figures/{seg_method}/matched_spatial_proteomics.png",
         counts=xenium_alignment_dir + "figures/{seg_method}/counts.png",
         counts_table=xenium_alignment_dir + "figures/{seg_method}/counts.csv", # written by savefig_plotnine
+        fraction_matched=xenium_alignment_dir + "figures/{seg_method}/fraction_matched.png",
     params:
         xenium_dir=xenium_dir,
         # name=output dir of each other Xenium segmentation
@@ -101,6 +113,7 @@ rule plot_alignment:
         --out_matched_xenium {output.matched_xenium} \
         --out_matched_proteomics {output.matched_proteomics} \
         --out_counts {output.counts} \
+        --out_fraction_matched {output.fraction_matched} \
         &> {log}
         """
 

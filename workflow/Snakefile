@@ -1,9 +1,17 @@
 # Spatial proteomics pipeline: image preparation, (background subtraction), segmentation,
-# quantification, optional DAPI alignment to Xenium and cell type annotation (TACIT), for any
-# multiplexed imaging technology.
+# quantification, optional DAPI alignment to Xenium, cell type annotation (TACIT) and per-cell
+# embeddings of foundation models (VirTues, KRONOS2), for any multiplexed imaging technology.
 #
 # The config comes from the profile (configfile: config/config.yml) or --configfile; samples come
 # from the experiments.yml it points to (tissue/panel/donor/sample). See README.md.
+
+# variables defined in other .smk files:
+# run_rules_image_preparation:        defined in image_preparation.smk ({} in Snakefile when the step is off)
+# run_rules_background_subtraction:   defined in background_subtraction.smk
+# run_rules_segmentation:             defined in segmentation.smk ({} in Snakefile when the step is off)
+# run_rules_xenium_alignment:         defined in xenium_alignment.smk ({} in Snakefile when the step is off)
+# run_rules_cell_type_annotation:     defined in cell_type_annotation.smk ({} in Snakefile when the step is off)
+# run_rules_dimensionality_reduction: defined in dimensionality_reduction.smk ({} in Snakefile when the step is off)
 
 import os
 import re
@@ -32,6 +40,12 @@ EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
 EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
 SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
 SAMPLE_IDS = list(SAMPLES)
+# optional subset (config samples: sample names, last level of the sample_id): every step runs on these only
+if config.get("samples"):
+    _unknown = sorted(set(config["samples"]) - {s.split("/")[-1] for s in SAMPLE_IDS})
+    if _unknown:
+        raise WorkflowError(f"config samples: not in {EXPERIMENTS_PATH}: {_unknown}")
+    SAMPLE_IDS = [s for s in SAMPLE_IDS if s.split("/")[-1] in config["samples"]]
 XENIUM_SAMPLE_IDS = [s for s in SAMPLE_IDS if SAMPLES[s]["xenium"]]
 print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
 
@@ -73,6 +87,8 @@ def shell_list(values):
 # GPU rules fall back to the CPU partition when config gpu.available is false
 GPU = config.get("gpu", {}).get("available", False)
 GPU_PARTITION = config.get("gpu", {}).get("partition_name", "gpu") if GPU else "cpu"
+# VirTues needs flash-attn, i.e. Ampere or newer GPUs (no gpu-rtx)
+VIRTUES_GPU_PARTITION = config.get("gpu", {}).get("virtues_partition_name", "gpu") if GPU else "cpu"
 GPU_EXTRA = "--gres=gpu:1" if GPU else ""
 
 
@@ -87,11 +103,45 @@ SEG_METHODS = config["segmentation"]["methods"]
 wildcard_constraints:
     seg_method="|".join(re.escape(m) for m in SEG_METHODS),
 
+# cell type annotation methods (tacit), one rule file each
+CT_METHODS = config["cell_type_annotation"]["methods"]
+
+# dimensionality reduction methods (virtues): per-cell embeddings of every mask, one rule file each
+DR_METHODS = config.get("dimensionality_reduction", {}).get("methods", [])
+
+
+def xenium_run_dir(sample_id):
+    """Xenium output folder of a sample imaged on Xenium: the closest parent of its image holding experiment.xenium."""
+    d = os.path.dirname(SAMPLES[sample_id]["image"])
+    while d != os.path.dirname(d):
+        if os.path.isfile(os.path.join(d, "experiment.xenium")):
+            return d
+        d = os.path.dirname(d)
+    return None
+
+
+def xenium_qc_mask(wildcards):
+    """Xenium saturation QC masks (first file of the multi-file OME-TIFF); [] for other technologies."""
+    if SAMPLES[wildcards.sample_id]["panel_meta"]["technology"] != "xenium":
+        return []
+    return xenium_run_dir(wildcards.sample_id) + "/aux_outputs/morphology_focus_qc_masks/ch0000_dapi.ome.tif"
+
+
+# Xenium segmentation whose cells also get cell types and embeddings (config cell_type_annotation: xenium_segmentation)
+XENIUM_CT_SEG = config["cell_type_annotation"].get("xenium_segmentation", "10x_mm_5um")
+
+
+def xenium_ct_seg_dir(sample_id):
+    """Output folder of the XENIUM_CT_SEG segmentation of the sample's Xenium run (read_xenium_sample path), or None."""
+    d = xenium_run_dir(sample_id)
+    return xenium_segmentations(d).get(XENIUM_CT_SEG, (None, None))[0] if d else None
+
 # a step switched off (config run:) is not loaded: the steps after it read its existing outputs as
 # plain input files (never re-run, missing input error if absent). Background subtraction is always
 # loaded: its switch also selects the image every step reads (source_image)
 run_rules_image_preparation, run_rules_segmentation = {}, {}
 run_rules_xenium_alignment, run_rules_cell_type_annotation = {}, {}
+run_rules_dimensionality_reduction = {}
 if config["run"]["image_preparation"]:
     include: "rules/image_preparation.smk"
 include: "rules/background_subtraction.smk"
@@ -101,6 +151,8 @@ if config["run"]["xenium_alignment"]:
     include: "rules/xenium_alignment.smk"
 if config["run"]["cell_type_annotation"]:
     include: "rules/cell_type_annotation.smk"
+if config["run"]["dimensionality_reduction"]:
+    include: "rules/dimensionality_reduction.smk"
 
 # function that selects which rules to run based on dictionaries below
 def get_targets(run, run_rules):
@@ -133,11 +185,17 @@ run_cell_type_annotation = {
     "cell_type_annotation": config["run"]["cell_type_annotation"],
 }
 
+# dimensionality reduction rules (per-cell embeddings)
+run_dimensionality_reduction = {
+    "dimensionality_reduction": config["run"]["dimensionality_reduction"],
+}
+
 targets_image_preparation = get_targets(run_image_preparation, run_rules_image_preparation)
 targets_background_subtraction = get_targets(run_background_subtraction, run_rules_background_subtraction)
 targets_segmentation = get_targets(run_segmentation, run_rules_segmentation)
 targets_xenium_alignment = get_targets(run_xenium_alignment, run_rules_xenium_alignment)
 targets_cell_type_annotation = get_targets(run_cell_type_annotation, run_rules_cell_type_annotation)
+targets_dimensionality_reduction = get_targets(run_dimensionality_reduction, run_rules_dimensionality_reduction)
 
 rule all:
     input:
@@ -146,3 +204,4 @@ rule all:
         targets_segmentation,
         targets_xenium_alignment,
         targets_cell_type_annotation,
+        targets_dimensionality_reduction,

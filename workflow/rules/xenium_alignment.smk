@@ -1,6 +1,9 @@
 ### --- Xenium alignment: proteomics DAPI onto the Xenium DAPI of the same slide, QC plots ---
 # Methods come from config xenium_alignment: methods
 
+# variables defined in other .smk files:
+# re: imported in Snakefile
+
 ALIGN_METHODS = config["xenium_alignment"]["methods"]
 # max_width values to align with, one output folder each
 ALIGN_MAX_WIDTHS = config["xenium_alignment"]["insitupy"]["max_width"]

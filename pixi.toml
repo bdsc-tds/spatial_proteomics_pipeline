@@ -2,19 +2,22 @@
 authors = ["user"]
 channels = ["conda-forge", "bioconda"]
 name = "spatial_proteomics_pipeline"
-platforms = ["linux-64"]
+# linux-64-cuda declares CUDA 12 and is used by the gpu environment only
+platforms = ["linux-64", { name = "linux-64-cuda", platform = "linux-64", cuda = "12" }]
 version = "0.1.0"
 
-# four environments only:
+# five environments only:
 #   default   - everything except Mesmer (image preparation, backsub, quantification, insitupy
 #               alignment, plots, experiments.yml tooling)
 #   spacec    - Mesmer segmentation (deepcell / tensorflow 2.8 need python <3.11 and numpy <2)
 #   tacit     - TACIT cell type annotation (R only)
+#   gpu       - VirTues segmentation and marker embeddings (torch + flash-attn, CUDA 12)
 #   snakemake - the pipeline driver, kept small; runs outside the container (see run.sh)
 [environments]
-default = {features=["default"]}
+default = {features=["default"], platforms=["linux-64"]}
 spacec = {features=["spacec"], no-default-feature=true}
 tacit = {features=["tacit"], no-default-feature=true}
+gpu = {features=["gpu"], no-default-feature=true}
 snakemake = {features=["snakemake"], no-default-feature=true}
 
 [tasks]
@@ -135,6 +138,47 @@ R_ENVIRON_USER = "/dev/null"
 R_PROFILE_USER = "/dev/null"
 R_LIBS_SITE = "$CONDA_PREFIX/lib/R/library"
 R_LIBS_USER = "$CONDA_PREFIX/lib/R/library"
+
+# VirTues (github.com/bunnelab/virtues, pinned commit): its attention layers import flash-attn, so a
+# CUDA 12 build of torch and an Ampere or newer GPU (A100 on the gpu partition) are required
+[feature.gpu]
+platforms = ["linux-64-cuda"]
+
+[feature.gpu.dependencies]
+python = "3.12.*"
+cuda-version = "12.*"
+pytorch-gpu = ">=2.5"
+flash-attn = ">=2.7"
+numpy = ">=2"
+pandas = "*"
+einops = "*"
+omegaconf = "*"
+safetensors = "*"
+huggingface_hub = "*"
+# KRONOS2 (Hugging Face MahmoodLab/KRONOS2) loads through transformers' trust_remote_code
+transformers = ">=4.56"
+scikit-learn = "*"
+scikit-image = "*"
+tifffile = "*"
+imagecodecs = "*"
+zarr = ">=3"
+# cell embeddings are written as HDF5
+h5py = ">=3.16.0,<4"
+loguru = "*"
+# imported at module level by instanseg (VirTues' segmentation head), but only an optional extra of instanseg-torch
+seaborn = "*"
+# exploratory notebooks on the VirTues outputs
+ipykernel = "*"
+matplotlib = "*"
+
+[feature.gpu.pypi-dependencies]
+# ESM-2, the protein language model behind VirTues' marker embeddings
+fair-esm = "*"
+# instance post-processing of VirTues' segmentation head
+instanseg-torch = "*"
+# VirTues from the git submodule external/virtues (pinned commit), installed editable like upstream's
+# `pip install -e .`: its pyproject packages only virtues/train.py, so a regular (git) install is empty
+virtues = { path = "external/virtues", editable = true }
 
 [feature.snakemake]
 platforms = ["linux-64"]
