@@ -40,6 +40,12 @@ EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
 EXPERIMENTS = load_experiments(EXPERIMENTS_PATH)
 SAMPLES = get_samples(EXPERIMENTS, EXPERIMENTS_PATH)
 SAMPLE_IDS = list(SAMPLES)
+# optional subset (config samples: sample names, last level of the sample_id): every step runs on these only
+if config.get("samples"):
+    _unknown = sorted(set(config["samples"]) - {s.split("/")[-1] for s in SAMPLE_IDS})
+    if _unknown:
+        raise WorkflowError(f"config samples: not in {EXPERIMENTS_PATH}: {_unknown}")
+    SAMPLE_IDS = [s for s in SAMPLE_IDS if s.split("/")[-1] in config["samples"]]
 XENIUM_SAMPLE_IDS = [s for s in SAMPLE_IDS if SAMPLES[s]["xenium"]]
 print(f"{len(SAMPLE_IDS)} samples, {len(XENIUM_SAMPLE_IDS)} with a Xenium run ({EXPERIMENTS_PATH})", file=sys.stderr)
 
@@ -102,31 +108,6 @@ CT_METHODS = config["cell_type_annotation"]["methods"]
 
 # dimensionality reduction methods (virtues): per-cell embeddings of every mask, one rule file each
 DR_METHODS = config.get("dimensionality_reduction", {}).get("methods", [])
-
-# CODEX samples of the 11 Xenium samples selected in analysis_repo (workflow/samples.smk CX_SELECTED_SAMPLES):
-# the only CODEX samples that get embeddings
-CODEX_DR_SAMPLES = ["donor_01", "donor_01", "donor_01", "donor_01", "donor_01",
-                    "donor_01", "donor_01", "donor_01", "donor_01", "donor_01",
-                    "donor_01"]
-# CODEX samples cropped from the uint8 slides slide_01 and slide_01 (no offset/shading correction, ~10x dimmer):
-# left out of the VirTues segmentation and its pooled standardization until re-exported
-CODEX_UINT8_SAMPLES = ["donor_01", "donor_01", "donor_01", "donor_01",
-                       "donor_01", "donor_01", "donor_01"]
-
-
-def is_codex(sample_id):
-    return SAMPLES[sample_id]["panel_meta"]["technology"] == "codex"
-
-
-# samples embedded by the dimensionality reduction methods: all, except CODEX samples outside CODEX_DR_SAMPLES
-DR_SAMPLE_IDS = [s for s in SAMPLE_IDS if not is_codex(s) or s.split("/")[-1] in CODEX_DR_SAMPLES]
-# samples segmented by VirTues: all, except the CODEX uint8 samples
-VIRTUES_SAMPLE_IDS = [s for s in SAMPLE_IDS if not (is_codex(s) and s.split("/")[-1] in CODEX_UINT8_SAMPLES)]
-
-
-def seg_sample_ids(seg_method):
-    """Samples segmented by a method: VIRTUES_SAMPLE_IDS for virtues, all samples otherwise."""
-    return VIRTUES_SAMPLE_IDS if seg_method == "virtues" else SAMPLE_IDS
 
 
 def xenium_run_dir(sample_id):

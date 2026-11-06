@@ -4,7 +4,7 @@
 # variables defined in other .smk files:
 # OUT:                defined in Snakefile
 # SEG_METHODS:        defined in Snakefile
-# VIRTUES_SAMPLE_IDS: defined in Snakefile
+# SAMPLE_IDS:         defined in Snakefile
 
 if "virtues" not in SEG_METHODS:
     raise WorkflowError("VirTues cell types read the logits of the VirTues segmentation: "
@@ -41,4 +41,4 @@ rule virtues_cell_types_virtues:
 # VirTues cell types of the VirTues mask of every sample it segments
 rule virtues_all:
     input:
-        expand(OUT + "/cell_type_annotation/virtues/virtues/{sample_id}/cell_types.csv", sample_id=VIRTUES_SAMPLE_IDS),
+        expand(OUT + "/cell_type_annotation/virtues/virtues/{sample_id}/cell_types.csv", sample_id=SAMPLE_IDS),

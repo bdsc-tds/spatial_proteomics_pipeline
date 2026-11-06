@@ -12,8 +12,7 @@
 # VIRTUES_GPU_PARTITION:  defined in Snakefile
 # GPU_EXTRA:              defined in Snakefile
 # XENIUM_CT_SEG:          defined in Snakefile
-# DR_SAMPLE_IDS:          defined in Snakefile
-# seg_sample_ids:         defined in Snakefile
+# SAMPLE_IDS:             defined in Snakefile
 # XENIUM_MASK_SAMPLE_IDS: defined in _dimensionality_reduction/xenium_cells.smk
 
 if "virtues" not in SEG_METHODS:
@@ -131,7 +130,7 @@ use rule virtues_embeddings_mesmer as virtues_embeddings_xenium with:
 # VirTues embeddings of every method in segmentation: methods, and of the Xenium cells (samples imaged on Xenium)
 rule virtues_embeddings_all:
     input:
-        [expand(OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5",
-                seg_method=m, sample_id=[s for s in DR_SAMPLE_IDS if s in seg_sample_ids(m)]) for m in SEG_METHODS],
+        expand(OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5",
+               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
         expand(OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
                sample_id=XENIUM_MASK_SAMPLE_IDS),

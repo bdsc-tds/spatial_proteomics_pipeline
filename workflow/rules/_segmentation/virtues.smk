@@ -7,7 +7,7 @@
 # OUT:                   defined in Snakefile
 # CONFIG_PATH:           defined in Snakefile
 # SAMPLES:               defined in Snakefile
-# VIRTUES_SAMPLE_IDS:    defined in Snakefile
+# SAMPLE_IDS:            defined in Snakefile
 # source_image:          defined in Snakefile
 # panel_meta:            defined in Snakefile
 # VIRTUES_GPU_PARTITION: defined in Snakefile
@@ -24,7 +24,7 @@ def virtues_markers(panel):
 
 
 # every panel needs a marker table: VirTues identifies channels by their protein
-VIRTUES_PANELS = sorted({SAMPLES[s]["panel"] for s in VIRTUES_SAMPLE_IDS})
+VIRTUES_PANELS = sorted({SAMPLES[s]["panel"] for s in SAMPLE_IDS})
 _missing_markers = [virtues_markers(p) for p in VIRTUES_PANELS if not os.path.exists(virtues_markers(p))]
 if _missing_markers:
     raise WorkflowError(f"VirTues needs a marker table per panel, missing: {_missing_markers}")
@@ -101,7 +101,7 @@ rule virtues_standardization_stats:
         script=f"{workflow.basedir}/scripts/_segmentation/virtues_standardization_stats.py",
         # from virtues_prepare_image
         stats=lambda wc: expand(OUT + "/segmentation/virtues/{sample_id}/channel_stats.csv",
-                                sample_id=[s for s in VIRTUES_SAMPLE_IDS if SAMPLES[s]["panel"] == wc.panel]),
+                                sample_id=[s for s in SAMPLE_IDS if SAMPLES[s]["panel"] == wc.panel]),
     output:
         stats=virtues_panel_dir + "standardization.csv",
     threads: 1
