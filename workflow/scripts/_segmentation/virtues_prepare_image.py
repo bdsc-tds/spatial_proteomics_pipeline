@@ -3,7 +3,8 @@
 For every channel with a UniProt ID in the panel's marker table: the full-resolution plane with its pixel
 value offset removed (+100 on Xenium protein channels) is resampled to resolution_um by area averaging
 (cv2.INTER_AREA), clipped at its upper_quantile inside the tissue and log1p-transformed. The tissue is the
-smoothed nuclear signal (channels mapped to Histone H3, P68431) above its Otsu threshold, dilated by 20 µm.
+smoothed nuclear stain (--tissue_channel, e.g. DAPI; read for the mask only, VirTues does not see it unless the
+marker table maps it) above its Otsu threshold, dilated by 20 µm.
 
 Writes the (channels, Y, X) float16 stack as .npy and, per channel, the clipping quantile and the pixel
 count, sum and sum of squares of the transformed values inside the tissue (for the panel's mean / std).
@@ -24,14 +25,12 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from readwrite import MultiplexImage, resolve_pixel_size
 
-# UniProt ID of the nuclear stains (DAPI, Hoechst, Iridium), as in spora
-NUCLEAR_UNIPROT = "P68431"
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="multiplexed image (qptiff or OME-TIFF)")
     parser.add_argument("--markers", required=True, help="marker table of the panel (channel_name, uniprot_id)")
+    parser.add_argument("--tissue_channel", required=True, help="nuclear stain the tissue mask is computed from (e.g. DAPI)")
     parser.add_argument("--pixel_size_fallback", type=float, required=True, help="µm/px used when the image metadata has none")
     parser.add_argument("--resolution_um", type=float, default=1.0, help="µm/px VirTues reads")
     parser.add_argument("--upper_quantile", type=float, default=0.99, help="per-channel clipping quantile inside the tissue")
@@ -73,14 +72,13 @@ def main():
             del plane
             print(f"channel {c + 1}/{len(markers)}: {name}", flush=True)
 
-    # tissue from the nuclear channels (whole image when the panel maps none)
-    nuclear = markers["uniprot_id"] == NUCLEAR_UNIPROT
-    if nuclear.any():
-        tissue = tissue_mask(stack[nuclear.to_numpy()].max(axis=0), args.resolution_um)
-    else:
-        print("WARNING: no channel mapped to Histone H3 (P68431): statistics over the whole image")
-        tissue = np.ones(out_shape, dtype=bool)
-    print(f"tissue: {tissue.mean() * 100:.1f}% of the image", flush=True)
+        # tissue from the nuclear stain, resampled like the channels
+        plane = img.read_channel(args.tissue_channel, args.threads, subtract_offset=True).astype(np.float32)
+        nuclear = cv2.resize(plane, (out_shape[1], out_shape[0]), interpolation=cv2.INTER_AREA)
+        del plane
+    tissue = tissue_mask(nuclear, args.resolution_um)
+    del nuclear
+    print(f"tissue ({args.tissue_channel}): {tissue.mean() * 100:.1f}% of the image", flush=True)
 
     # clip each channel at its upper quantile inside the tissue, log1p, and sum the tissue values
     rows = []

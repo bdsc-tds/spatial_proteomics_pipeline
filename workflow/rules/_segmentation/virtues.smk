@@ -70,6 +70,8 @@ rule virtues_prepare_image:
         image=virtues_dir + "image_1um.npy",
         stats=virtues_dir + "channel_stats.csv",
     params:
+        # tissue mask from the first nuclear channel (DAPI), also when the marker table leaves it out
+        tissue_channel=lambda wc: shell_list(panel_meta(wc)["nuclear_channels"][:1]),
         pixel_size=lambda wc: panel_meta(wc)["pixel_size_um"],
         resolution_um=VIRTUES["resolution_um"],
         upper_quantile=VIRTUES["upper_quantile"],
@@ -86,6 +88,7 @@ rule virtues_prepare_image:
         {PX} python -u {input.script} \
         --image {input.image} \
         --markers {input.markers} \
+        --tissue_channel {params.tissue_channel} \
         --pixel_size_fallback {params.pixel_size} \
         --resolution_um {params.resolution_um} \
         --upper_quantile {params.upper_quantile} \
