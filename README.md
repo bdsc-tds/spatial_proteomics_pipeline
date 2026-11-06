@@ -91,12 +91,6 @@ NSCLC:
 `ome.tiff`), optionally behind a subfolder (`images/ome.tiff`), or a full file name
 (`morphology_focus/ch0000_dapi.ome.tif` for Xenium). Exactly one file must match.
 
-The nuclear and membrane signals given to the segmentation methods are each the per-pixel maximum of their channels
-(raw values), after removing every channel's pixel value offset read from the OME metadata (+100 on
-Xenium protein channels, 0 for DAPI, stains and formats without one). Values below the offset are kept negative
-(float32 segmentation input), as in the per-cell mean intensities and the KRONOS2 embeddings; only VirTues clips
-them at 0.
-
 #### Creating / updating experiments.yml
 
 The file can be written by hand, or generated from the raw data folder with `update-experiments`
@@ -117,16 +111,10 @@ pixi run update-experiments --config config/configs_codex/config.yml            
 - previews which Xenium run each sample will be aligned to;
 - reports samples whose image disappeared (removed only with `--prune`).
 
-Each sample's image and Xenium run are not stored: they are found when the pipeline starts. Xenium
-runs are expected as `{_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/` (the
-xenium_analysis_pipeline layout, `sample` being the Xenium output folder). Names are
-compared case-insensitively with `-` and `_` treated alike, and one name "contains" another when it
-holds it as whole `_`-separated tokens. A proteomics sample is matched to the run whose donor contains
-the proteomics donor and whose donor or sample contains the proteomics sample, e.g.
-`donor_01/donor_01` →
-`donor_01/output-XETG00000__slide_01__donor_01__…`. Tissue and panel
-names are ignored. Samples without a match, or with several, get no alignment. The pipeline also warns about raw samples missing
-from experiments.yml.
+Images and Xenium runs are located when the pipeline starts, with Xenium runs expected as
+`{_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/`. A sample is matched to the run whose donor
+contains its donor and whose donor or sample contains its sample (case-insensitive, `-` ≡ `_`, whole
+`_`-separated tokens); samples with no match or several matches get no alignment.
 
 ## Running
 
@@ -153,18 +141,15 @@ Some rules run on the `gpu` partition:  (set `gpu: available: false` in the conf
 | `cell_type_annotation` | `tacit_{seg_method}`, `tacit_xenium` | Assigns cell types with TACIT (`signatures/{panel}.csv`) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
 | `dimensionality_reduction` | `{dr_method}_embeddings_{seg_method}`, `xenium_cell_mask`, `{dr_method}_embeddings_xenium` | Computes per-cell embeddings with VirTues and/or KRONOS2 for every segmentation method's cells, and for 10x's own cells on Xenium samples. |
 
-**VirTues** ([bunnelab/virtues](https://github.com/bunnelab/virtues), `gpu` environment, A100 GPU) is a
-panel-agnostic foundation model that identifies each channel by its protein (`virtues/{panel}.csv` next
-to the dataset config: `channel_name, uniprot_id`, blank = not used; DAPI as Histone H3 P68431). It
-segments whole cells at 1 µm/px, and each cell's embedding is the mean of the 512-d patch tokens it
-overlaps, weighted by its pixel count in each patch (computed crop by crop to fit whole slides in memory).
+**VirTues** ([bunnelab/virtues](https://github.com/bunnelab/virtues)) needs an A100 GPU and a
+`virtues/{panel}.csv` next to the dataset config mapping each channel to its protein (`channel_name,
+uniprot_id`, blank = not used; DAPI as Histone H3 P68431). The weights and ESM-2 are downloaded to
+`segmentation: virtues: model_dir` on first use.
 
-**KRONOS2** ([MahmoodLab/KRONOS2](https://huggingface.co/MahmoodLab/KRONOS2), gated, CC BY-NC-ND 4.0;
-`gpu` environment) is a marker-aware ViT that identifies each channel by its marker name
-(`kronos2/{panel}.csv` next to the dataset config: `channel_name, kronos2_marker`, blank = not used; names
-from `marker_metadata.csv` in the model folder). Each cell's embedding is the 768-d CLS token of a
-`box_size` px box around its centroid with pixels outside the cell zeroed, following
-[CORAL](https://github.com/mahmoodlab/CORAL); the model is loaded from `dimensionality_reduction: kronos2: model_dir`, downloaded once after requesting access:
+**KRONOS2** ([MahmoodLab/KRONOS2](https://huggingface.co/MahmoodLab/KRONOS2)) needs a `kronos2/{panel}.csv`
+next to the dataset config mapping each channel to a KRONOS2 marker (`channel_name, kronos2_marker`, blank =
+not used; names from `marker_metadata.csv` in the model folder). The model is gated: request access on
+Hugging Face, then download it once to `dimensionality_reduction: kronos2: model_dir`:
 ```bash
 export CONDA_OVERRIDE_CUDA=12.9
 pixi run -e gpu hf auth login    # read token
