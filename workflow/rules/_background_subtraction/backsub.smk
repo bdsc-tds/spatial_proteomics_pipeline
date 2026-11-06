@@ -2,6 +2,7 @@
 
 # variables defined in other .smk files:
 # OUT:                        defined in Snakefile
+# CONFIG_PATH:                defined in Snakefile
 # SAMPLES:                    defined in Snakefile
 # BACKSUB_IMAGE:              defined in Snakefile
 # SAMPLE_IDS:                 defined in Snakefile
@@ -13,6 +14,9 @@ rule background_subtraction:
     input:
         script=f"{workflow.basedir}/scripts/_background_subtraction/run_backsub.py",
         image=lambda wc: SAMPLES[wc.sample_id]["image"],
+        # raw -> clean channel names of the panel: channel_names/{panel}.csv next to the dataset config
+        channel_names=lambda wc: os.path.join(os.path.dirname(CONFIG_PATH), "channel_names",
+                                              SAMPLES[wc.sample_id]["panel"] + ".csv"),
     output:
         image=BACKSUB_IMAGE,
         markers=background_subtraction_dir + "markers.csv",
@@ -30,6 +34,7 @@ rule background_subtraction:
         {PX} python {input.script} \
         --img_path {input.image} \
         --output_dir $(dirname {output.image}) \
+        --channel_names {input.channel_names:q} \
         &> {log}
         """
 

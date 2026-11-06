@@ -3,6 +3,7 @@
 import os
 import argparse
 import subprocess
+import pandas as pd
 from backsub import metadata2markers
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def generate_markers_csv(
     remove_background_channels: bool = False,
     remove_dapi: bool = False,
     keep_registration_markername: str = "DAPI",
+    channel_names: str = None,
 ):
     """
     Generate a markers CSV file from an OME-TIFF image.
@@ -27,6 +29,9 @@ def generate_markers_csv(
         remove_background_channels:   If True, marks background channels with remove=TRUE.
         remove_dapi:                  If True, marks extra DAPI reference channels with remove=TRUE.
         keep_registration_markername: Marker name to keep when remove_dapi=True (default: DAPI).
+        channel_names:                CSV (raw_name, channel_name) renaming the kept channels; raw_name
+                                      is the marker name without its " - <filter>-autof" suffix.
+                                      None keeps the raw names.
     """
     img_path = Path(input_img)
     out_dir = Path(output_dir)
@@ -52,13 +57,25 @@ def generate_markers_csv(
     # remove markers with names containing "elu" and set remove to true
     df.loc[df["marker_name"].str.contains("elu"), "remove"] = "TRUE"
 
+    # rename the kept channels: strip the " - TRITC-autof" / " - Cy5-autof" suffix of instrument
+    # AF-subtracted exports, then map to the clean name; backsub writes these names into the output.
+    # The background channels keep their names, backsub finds them by exact name
+    if channel_names is not None:
+        mapping = pd.read_csv(channel_names).set_index("raw_name")["channel_name"]
+        base = df["marker_name"].str.replace(r" - (TRITC|Cy5)-autof$", "", regex=True)
+        kept = df["remove"] != "TRUE"
+        unmapped = sorted(set(base[kept]) - set(mapping.index))
+        if unmapped:
+            raise ValueError(f"channels missing from {channel_names}: {unmapped}")
+        df.loc[kept, "marker_name"] = base[kept].map(mapping)
+
     output_path = out_dir / output_file_name
     df.to_csv(output_path, index=False)
     print(f"Markers CSV saved to: {output_path}")
     return df
 
 
-def main(img_path: str, output_dir: str):
+def main(img_path: str, output_dir: str, channel_names: str = None):
     df = generate_markers_csv(
         input_img=img_path,
         output_dir=output_dir,
@@ -66,6 +83,7 @@ def main(img_path: str, output_dir: str):
         remove_background_channels=False,
         remove_dapi=True,
         keep_registration_markername="DAPI",
+        channel_names=channel_names,
     )
     # run the backsub CLI; check=True so that a failed subtraction fails the rule
     subprocess.run(
@@ -82,6 +100,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run background subtraction pipeline.")
     parser.add_argument("--img_path", required=True, help="Path to the input OME-TIFF image file.")
     parser.add_argument("--output_dir", required=True, help="Directory to save the output files")
+    parser.add_argument("--channel_names", help="CSV (raw_name, channel_name) renaming the kept channels")
     args = parser.parse_args()
 
-    main(img_path=args.img_path, output_dir=args.output_dir)
+    main(img_path=args.img_path, output_dir=args.output_dir, channel_names=args.channel_names)
