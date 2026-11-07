@@ -10,6 +10,9 @@ config/*
 # container image and model weights (default locations in config/example/config.yml)
 resources/
 
+# optional local Helvetica (commercial font, not redistributable; see workflow/scripts/utils/plotting.py)
+workflow/scripts/utils/fonts/
+
 # pixi environments (pixi.lock is tracked, it is baked into the container)
 .pixi/
 
