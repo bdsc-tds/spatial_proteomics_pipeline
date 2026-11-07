@@ -1,9 +1,11 @@
-"""Shared plotting setup and save helpers, so every figure of the pipeline looks the same (Helvetica).
+"""Shared plotting setup and save helpers, so every figure of the pipeline looks the same.
 
-The font file is shipped in utils/fonts/ because Helvetica is not installed in the container.
+Figures use Helvetica when utils/fonts/Helvetica.ttf exists (not shipped: Helvetica is a commercial
+font; the folder is gitignored, so drop your own licensed copy there), and matplotlib's bundled
+DejaVu Sans otherwise.
 Usage: call set_mpl_rcparams() once before plotting, then save with savefig() / savefig_plotnine().
-plotnine plots should still set text=element_text(font="Helvetica") in theme(), since plotnine
-themes do not inherit font.family from rcParams.
+plotnine plots should still set text=element_text(font=FONT) in theme(), since plotnine themes do
+not inherit font.family from rcParams.
 """
 
 import logging
@@ -16,6 +18,10 @@ import numpy as np
 from matplotlib import font_manager
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# optional local font file (see module docstring); FONT is the family name to use in plotnine themes
+FONT_PATH = os.path.join(script_dir, "fonts", "Helvetica.ttf")
+FONT = "Helvetica" if os.path.exists(FONT_PATH) else "DejaVu Sans"
 
 # fixed colours of some tissues (first part of the sample ID); any other tissue gets a default palette colour
 tissue_cols = {"CRC": "#5696E8",
@@ -53,15 +59,15 @@ def set_mpl_rcparams(
         "ps.fonttype": 42,
         "svg.fonttype": "none",
         "text.usetex": False,
-        "font.family": "Helvetica",
+        "font.family": FONT,
         "savefig.transparent": False,
         "figure.figsize": (4, 4),
         "axes.titlesize": 16,
     },
 ):
-    # add Helvetica as font
-    font_path = os.path.join(script_dir, "fonts/Helvetica.ttf")
-    font_manager.fontManager.addfont(font_path)
+    # register the local Helvetica file, if present
+    if FONT == "Helvetica":
+        font_manager.fontManager.addfont(FONT_PATH)
 
     # apply the shared matplotlib defaults
     mpl.rcParams.update(params)

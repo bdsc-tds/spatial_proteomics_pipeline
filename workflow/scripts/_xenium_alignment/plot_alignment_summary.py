@@ -34,7 +34,7 @@ from plotnine import (aes, element_blank, element_line, element_rect, element_te
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from experiments import get_samples, load_experiments
-from plotting import savefig, savefig_plotnine, set_mpl_rcparams
+from plotting import FONT, savefig, savefig_plotnine, set_mpl_rcparams
 from plot_alignment import align_proteomics_cells, match_cells, read_xenium_cells
 
 MAX_WIDTH_COLORS = ["#19618A", "#09B39C", "#FFB300", "#D32F2F", "#7B1FA2", "#5D4037"]
@@ -131,7 +131,7 @@ def stacked_barplot(ncells, fraction, fill, fill_colors, modality_colors, bar_wi
         + facet_wrap("method", ncol=1)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_blank(),
                 axis_ticks_major_x=element_blank(),
                 axis_title_y=element_text(size=14),
@@ -151,7 +151,7 @@ def stacked_barplot(ncells, fraction, fill, fill_colors, modality_colors, bar_wi
         + geom_col(position=position_dodge(width=0.8), width=0.8)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(angle=45, hjust=1, color="black"),
                 axis_title_y=element_text(size=14),
                 legend_title=element_text(size=18),
@@ -281,7 +281,7 @@ def main():
         + facet_wrap("method_strip", ncol=n_methods)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(color="black"),
                 panel_grid_major=element_line(color="lightgrey", size=0.4),
                 legend_position="none",

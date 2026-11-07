@@ -41,7 +41,7 @@ import PyComplexHeatmap as pch
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
-from plotting import TACIT_mm_cols, panel_ratios, tissue_cols, savefig, savefig_plotnine, set_mpl_rcparams
+from plotting import FONT, TACIT_mm_cols, panel_ratios, tissue_cols, savefig, savefig_plotnine, set_mpl_rcparams
 
 OTHERS = "Others"
 OTHERS_COLOR = "#BDBDBD"
@@ -88,7 +88,7 @@ def stacked_by_tissue(counts, fill, values, breaks, fill_title, out):
         + labs(x="", y="fraction of cells", fill=fill_title)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(rotation=90, ha="center", va="top"),
                 figure_size=(0.3 * n_samples + 4, 5))
         + scale_y_continuous(expand=[0, 0, 0.01, 0])
@@ -124,7 +124,7 @@ def pairs_top(mixed, col, order, ct_order, palette, title):
         + labs(x="", y="final cell type\nfraction", fill="final TACIT cell type", title=title)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_blank(), axis_ticks_major_x=element_blank(),
                 figure_size=(0.32 * len(order) + 5, 9))
         + scale_y_continuous(expand=[0, 0, 0.01, 0])
@@ -143,7 +143,7 @@ def sample_bars(data, x, order, fill_values, y_title, title, y_scale=None):
         + labs(x="", y=y_title, title=title)
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 figure_size=(6, 0.25 * len(order) + 1.5))
         + (y_scale if y_scale is not None else scale_y_continuous(expand=[0, 0, 0.01, 0]))
     )
@@ -167,12 +167,12 @@ def sample_mixed_counts(cells, col, ct_order, palette, title, empty_text, out):
     p_bot = (
         ggplot(counts, aes("pair", "cells"))
         + geom_col(aes(fill="n_types"), width=0.8, show_legend=False)
-        + geom_text(aes(label="cells"), angle=90, va="bottom", nudge_y=0.05, size=9, family="Helvetica")
+        + geom_text(aes(label="cells"), angle=90, va="bottom", nudge_y=0.05, size=9, family=FONT)
         + scale_fill_manual(values=PAIR_COLORS)
         + labs(x="", y="mixed cells (log scale)")
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(rotation=45, ha="right"),
                 figure_size=(0.32 * len(order) + 5, 9))
         + scale_y_log10(limits=(0.8, counts["cells"].max() * 5), expand=[0, 0, 0, 0])
@@ -356,7 +356,7 @@ p = (
     + labs(x="", y="fraction of unique cells (not mixed)", fill="TACIT cell type", color="tissue")
     + theme_classic()
     + theme(panel_border=element_rect(fill=None, color="black"),
-            text=element_text(font="Helvetica"),
+            text=element_text(font=FONT),
             axis_text_x=element_text(rotation=45, ha="right"),
             figure_size=(0.45 * len(present) + 4, 5))
     + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))
@@ -374,12 +374,12 @@ totals["bar"] = totals["cells"].clip(lower=0.8)
 p_top = (
     ggplot(totals, aes("cell_type", "bar", fill="cell_type"))
     + geom_col(width=0.7, show_legend=False)
-    + geom_text(aes(label="cells"), angle=90, va="bottom", nudge_y=0.05, size=9, family="Helvetica")
+    + geom_text(aes(label="cells"), angle=90, va="bottom", nudge_y=0.05, size=9, family=FONT)
     + scale_fill_manual(values=palette)
     + labs(x="", y="pure cells\n(log scale)")
     + theme_classic()
     + theme(panel_border=element_rect(fill=None, color="black"),
-            text=element_text(font="Helvetica"),
+            text=element_text(font=FONT),
             axis_text_x=element_blank(), axis_ticks_major_x=element_blank(),
             figure_size=size)
     + scale_y_log10(limits=(0.8, max(totals["cells"].max(), 1) * 300), expand=[0, 0, 0, 0])
@@ -396,7 +396,7 @@ p_bot = (
     + labs(x="", y="fraction of pure cells\n(breakpoint 4 as cell type score threshold)", color="tissue")
     + theme_classic()
     + theme(panel_border=element_rect(fill=None, color="black"),
-            text=element_text(font="Helvetica"),
+            text=element_text(font=FONT),
             axis_text_x=element_text(rotation=45, ha="right"),
             figure_size=size)
     + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))
@@ -430,7 +430,7 @@ p_bot = (
     + labs(x="", y="fraction of mixed cells\n(log scale)", color="tissue")
     + theme_classic()
     + theme(panel_border=element_rect(fill=None, color="black"),
-            text=element_text(font="Helvetica"),
+            text=element_text(font=FONT),
             axis_text_x=element_text(rotation=45, ha="right"),
             figure_size=(0.32 * len(order) + 5, 9))
     + scale_y_log10()
@@ -550,13 +550,13 @@ for i, sample_id in enumerate(args.sample_ids):
     p_n = (
         ggplot(counts, aes("cell_type", "bar", fill="cell_type"))
         + geom_col(width=0.8, show_legend=False)
-        + geom_text(aes(label="pure_cells"), ha="left", nudge_y=0.05, size=8, family="Helvetica")
+        + geom_text(aes(label="pure_cells"), ha="left", nudge_y=0.05, size=8, family=FONT)
         + coord_flip()
         + scale_fill_manual(values=palette)
         + labs(x="", y="pure cells\n(log scale)")
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_y=element_blank(), axis_ticks_major_y=element_blank(),
                 figure_size=(7, 0.25 * len(present) + 1.5))
         + scale_y_log10(limits=(0.8, upper), breaks=breaks, expand=[0, 0, 0, 0])
@@ -595,7 +595,7 @@ for i, sample_id in enumerate(args.sample_ids):
                    title=f"{title}: mixed cells per final TACIT cell type")
             + theme_classic()
             + theme(panel_border=element_rect(fill=None, color="black"),
-                    text=element_text(font="Helvetica"),
+                    text=element_text(font=FONT),
                     axis_text_x=element_text(rotation=45, ha="right"),
                     figure_size=(4 * ncol, 3.5 * nrow + 1))
             + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))
@@ -615,7 +615,7 @@ for i, sample_id in enumerate(args.sample_ids):
                    title=f"{title}: mixed cells")
             + theme_classic()
             + theme(panel_border=element_rect(fill=None, color="black"),
-                    text=element_text(font="Helvetica"),
+                    text=element_text(font=FONT),
                     axis_text_x=element_text(rotation=45, ha="right"),
                     figure_size=(0.45 * long.loc[own, "cell_type"].nunique() + 2, 5))
             + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1))

@@ -256,8 +256,8 @@ def match_cells_spatial_mnn(proseg_obs, xr_obs, x_centroid="x_centroid", y_centr
     Match proseg and xenium ranger cells by spatial mutual nearest neighbours (MNN).
 
     A proseg cell and a xenium ranger cell are considered matched if each is the
-    other's nearest neighbour by centroid distance (adapted from the xenium_analysis_pipeline's spatial
-    MNN cell-mapping script).
+    other's nearest neighbour by centroid distance (adapted from the spatial MNN
+    cell-mapping script of xenium_analysis_pipeline).
 
     Parameters
     ----------

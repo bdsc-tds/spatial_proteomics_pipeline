@@ -31,7 +31,7 @@ from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggpl
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
-from plotting import savefig, savefig_plotnine, set_mpl_rcparams
+from plotting import FONT, savefig, savefig_plotnine, set_mpl_rcparams
 from multimodal_readwrite import apply_affine, mesmer_feature_table_to_adata, xenium_pixel_size
 from xenium_readwrite import match_cells_spatial_mnn, read_xenium_sample
 
@@ -189,7 +189,7 @@ def main():
                     format_string="{:,}")
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(angle=45, hjust=1, color="black"),
                 legend_position="none",
                 figure_size=(4, 4))
@@ -215,7 +215,7 @@ def main():
         + geom_text(aes(label="label"), position=position_stack(vjust=0.5), size=7, color="white")
         + theme_classic()
         + theme(panel_border=element_rect(fill=None, color="black"),
-                text=element_text(font="Helvetica"),
+                text=element_text(font=FONT),
                 axis_text_x=element_text(color="black"),
                 figure_size=(3, 4))
         + scale_y_continuous(expand=[0, 0, 0.01, 0], limits=(0, 1), labels=lambda v: [f"{x:.0%}" for x in v])
