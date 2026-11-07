@@ -7,9 +7,12 @@
 
 # the config in use: --configfile if given, else the profile default
 CONFIG=config/config.yml
-# the profile: --profile if given, else $SNAKEMAKE_PROFILE (read by snakemake itself), else profiles/slurm/
+# the profile: --profile if given, else $SNAKEMAKE_PROFILE (read by snakemake itself),
+# else profiles/local/ (gitignored, e.g. a symlink to your own profile), else profiles/slurm/
 PROFILE_ARGS=(--profile profiles/slurm/)
-[[ -n "$SNAKEMAKE_PROFILE" ]] && PROFILE_ARGS=()
+[[ -d profiles/local ]] && PROFILE_ARGS=(--profile profiles/local/)
+# printenv: only an exported variable reaches snakemake (a plain shell variable from ~/.bashrc does not)
+[[ -n "$(printenv SNAKEMAKE_PROFILE)" ]] && PROFILE_ARGS=()
 for ((i = 1; i <= $#; i++)); do
     if [[ "${!i}" == "--configfile" ]]; then j=$((i + 1)); CONFIG="${!j}"; fi
     if [[ "${!i}" == "--profile" ]]; then PROFILE_ARGS=(); fi
