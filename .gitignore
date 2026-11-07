@@ -2,6 +2,14 @@
 **/.snakemake
 **/log_files
 
+# dataset configs stay outside the repository (or as local folders/symlinks here): only the example is tracked
+config/*
+!config/README.md
+!config/example/
+
+# container image and model weights (default locations in config/example/config.yml)
+resources/
+
 # pixi environments (pixi.lock is tracked, it is baked into the container)
 .pixi/
 
@@ -23,8 +31,8 @@
 *.txt
 *.tsv
 *.csv
-# except the cell type signature tables (TACIT), which are pipeline inputs
-!config/**/signatures/*.csv
+# except the per-panel tables of the example config (signatures, virtues, kronos2, channel_names), which are pipeline inputs
+!config/example/**/*.csv
 *.xlsx
 *.xls
 *.json

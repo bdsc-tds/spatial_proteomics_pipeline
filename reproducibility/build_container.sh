@@ -2,12 +2,13 @@
 
 # Build the pipeline's pixi container (default / spacec / tacit / gpu / snakemake environments):
 #   sbatch reproducibility/build_container.sh
-# The image is written to OUTPUT_DIR (override with: OUTPUT_DIR=/path sbatch ...), which must match
-# `containers: pixi:` in config/configs_*/config.yml
+# The image is written to OUTPUT_DIR (default: resources/ in the repository; override with
+# OUTPUT_DIR=/path sbatch ...), which must match `containers: pixi:` in the dataset config. The build
+# runs in BUILD_DIR (default: $TMPDIR, else /tmp), which needs ~30 GB and must allow --fakeroot builds.
 
-## Choose paths/names of output (stdout) and error (stderr) logs
-#SBATCH --output /path/to/scratch
-#SBATCH --error /path/to/scratch
+## Choose paths/names of output (stdout) and error (stderr) logs (relative to the submission folder)
+#SBATCH --output build_spatial_proteomics_container_%j.out
+#SBATCH --error build_spatial_proteomics_container_%j.err
 
 #SBATCH --job-name=build_spatial_proteomics_container
 #SBATCH --partition cpu
@@ -19,7 +20,12 @@
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=32GB
 
-module load singularityce
+# apptainer (or singularity) must be on PATH; on clusters providing it as an environment module, load it
+if ! command -v apptainer &>/dev/null && ! command -v singularity &>/dev/null; then
+    module load apptainer 2>/dev/null || module load singularityce
+fi
+# the build command: apptainer, or singularity on older installations
+BUILDER=$(command -v apptainer || command -v singularity)
 
 # Exit immediately if a command exits with a non-zero status
 set -e
@@ -48,7 +54,7 @@ echo ">>> Using project root: $PROJECT_ROOT"
 
 # 2. Define expected file locations
 DEF_REL_PATH="reproducibility/pixi.def"
-OUTPUT_DIR="${OUTPUT_DIR:-/path/to/data"
+OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_ROOT/resources}"
 IMAGE_NAME="pixi.sif"
 
 FULL_DEF_PATH="${PROJECT_ROOT}/${DEF_REL_PATH}"
@@ -70,7 +76,7 @@ if [[ ! -f "$PROJECT_ROOT/external/virtues/pyproject.toml" ]]; then
 fi
 
 # 4. Setup Scratch
-SCRATCH_WORK_DIR="/path/to/scratch(date +%s)"
+SCRATCH_WORK_DIR="${BUILD_DIR:-${TMPDIR:-/tmp}}/build_pixi_$(date +%s)"
 # =================================================
 
 # Save starting location (though script execution creates a subshell, this is good practice)
@@ -97,9 +103,9 @@ cp "$FULL_DEF_PATH" "$SCRATCH_WORK_DIR/singularity.def"
 echo ">>> Changing directory to scratch..."
 cd "$SCRATCH_WORK_DIR"
 
-echo ">>> Starting Singularity build (this may take time)..."
-# We use --fakeroot, which works on /scratch but not /work
-singularity build --fakeroot --force "$IMAGE_NAME" singularity.def
+echo ">>> Starting container build with $BUILDER (this may take time)..."
+# --fakeroot needs a local or scratch file system (it often fails on network/project storage)
+"$BUILDER" build --fakeroot --force "$IMAGE_NAME" singularity.def
 
 # -------------------------------------------------
 # STAGE 3: Finalize

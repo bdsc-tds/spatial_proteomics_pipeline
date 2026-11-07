@@ -3,8 +3,8 @@
 The proteomics centroids (pixels of the proteomics image) are mapped with the alignment matrix to
 Xenium morphology pixels, then to µm with the Xenium pixel size from experiment.xenium. Cells are
 matched as mutual nearest neighbours within --max_dist µm. Reading, alignment and matching use the
-helpers shared with analysis_repo (multimodal_readwrite, xenium_readwrite), so the matches are
-the same as those of read_xenium_proteomics_sample there. Writes:
+helpers of utils/multimodal_readwrite.py and utils/xenium_readwrite.py, so the matches are the same
+as those of read_xenium_proteomics_sample. Writes:
   - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
   - an overlay of Xenium and aligned proteomics centroids
   - per modality (Xenium, aligned proteomics), the matched and the unmatched cells side by side
@@ -56,7 +56,7 @@ def parse_args():
 
 def align_proteomics_cells(feature_table, affine, xenium_dir):
     """Proteomics cells (feature table metadata) and their centroids in Xenium µm, as in
-    read_xenium_proteomics_sample (analysis_repo). xenium_dir can be a 10x output folder or a
+    read_xenium_proteomics_sample (multimodal_readwrite). xenium_dir can be a 10x output folder or a
     Proseg raw_results folder (the pixel size then comes from the matching raw Xenium run)."""
     # Xenium pixel size from experiment.xenium
     pixel_size = xenium_pixel_size(xenium_dir)
@@ -69,7 +69,7 @@ def align_proteomics_cells(feature_table, affine, xenium_dir):
 
 
 def read_xenium_cells(xenium_dir):
-    """Xenium cells (obs, indexed by cell ID) with centroids in µm, read as in analysis_repo
+    """Xenium cells (obs, indexed by cell ID) with centroids in µm, read with read_xenium_sample
     (10x output folder or Proseg raw_results folder)."""
     xenium = read_xenium_sample(xenium_dir, anndata=True, gex_only=True).obs
     print(f"{len(xenium)} Xenium cells ({xenium_dir})")

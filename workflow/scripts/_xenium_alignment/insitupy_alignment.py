@@ -1,6 +1,6 @@
 """Register the proteomics DAPI image onto the Xenium nuclei (DAPI) image with insitupy.
 
-The Xenium DAPI (morphology focus channel 0) is read with read_xenium_sample, as in analysis_repo.
+The Xenium DAPI (morphology focus channel 0) is read with read_xenium_sample (utils/xenium_readwrite.py).
 Uses insitupy's ImageRegistration directly: SIFT features are matched on downscaled copies of both
 images and the affine matrix is fitted on the full-resolution feature coordinates. Writes:
   - the matrix (3x3, maps proteomics image pixels (x, y) to Xenium morphology image pixels)

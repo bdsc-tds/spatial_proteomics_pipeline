@@ -1,9 +1,7 @@
-"""Proteomics + Xenium readers shared with the analysis_repo repository.
+"""Proteomics + Xenium readers: align the pipeline's proteomics cells to a Xenium sample and match them.
 
-Copied verbatim from analysis_repo/workflow/scripts/general/multimodal_readwrite.py (uncommitted
-there as of 2026-10-06), so that proteomics cells are aligned and matched to Xenium cells the same
-way in both projects. Do not edit it here: change it there and copy it over again. The only change is
-the import below, from xenium_readwrite (this repo's copy of readwrite.py) instead of readwrite.
+Also usable outside the pipeline, to load a Xenium sample together with its aligned proteomics
+(read_xenium_proteomics_sample).
 """
 
 # read/write helpers to load a Xenium sample together with the spatial proteomics (COMET, CODEX)
@@ -11,7 +9,7 @@ the import below, from xenium_readwrite (this repo's copy of readwrite.py) inste
 #   processed/segmentation/{seg_method}/{sample_id}/feature_table.csv + *_boundaries.geojson
 #   processed/xenium_alignment/{align_method}/max_width_{N}/{sample_id}/affine_matrix.csv
 # The affine matrix maps proteomics image pixels onto Xenium morphology pixels.
-# readwrite.py (same folder) must be importable, i.e. on sys.path, before importing this module.
+# xenium_readwrite.py (same folder) must be importable, i.e. on sys.path, before importing this module.
 
 import os
 import re
@@ -39,37 +37,6 @@ MESMER_BOUNDARY_FILES = {"cell_boundaries": "cell_boundaries.geojson",
 XENIUM_ELEMENT_FLAGS = ["cells_as_circles", "cells_boundaries", "cells_boundaries_layers", "nucleus_boundaries",
                         "cells_labels", "nucleus_labels", "transcripts", "morphology_mip", "morphology_focus",
                         "aligned_images"]
-
-
-def proteomics_sample_paths(processed_dir,
-                            sample_id,
-                            seg_method="mesmer",
-                            align_method="insitupy",
-                            max_width=8000):
-    """
-    Paths of the segmentation folder and of the affine matrix of one proteomics sample processed with
-    the spatial_proteomics_pipeline.
-
-    Arguments
-    ---------
-    processed_dir: str
-        processed/ folder of the pipeline output (e.g. cfg["codex_cx_dir"] + "processed/")
-    sample_id: str
-        sample ID as {tissue}/{panel}/{donor}/{sample}
-    seg_method: str
-        segmentation method. Default: "mesmer"
-    align_method: str
-        method used to align the proteomics image onto the Xenium image. Default: "insitupy"
-    max_width: int
-        max_width the insitupy alignment was run with. Default: 8000
-
-    Returns
-    -------
-    dict with keys "seg_dir" and "affine"
-    """
-    return dict(seg_dir=os.path.join(processed_dir, "segmentation", seg_method, sample_id),
-                affine=os.path.join(processed_dir, "xenium_alignment", align_method, f"max_width_{max_width}",
-                                    sample_id, "affine_matrix.csv"))
 
 
 # function to find the Xenium pixel size (µm/px) of a sample
@@ -197,9 +164,10 @@ def read_xenium_proteomics_sample(xenium_path,
         raw_results for proseg)
     seg_dir: str
         folder of the proteomics segmentation with feature_table.csv and the *_boundaries.geojson files
-        (see proteomics_sample_paths)
+        ({output_path}/segmentation/{seg_method}/{sample_id})
     affine: str
         3x3 affine matrix (.csv) mapping proteomics image pixels onto Xenium morphology pixels
+        ({output_path}/xenium_alignment/{align_method}/max_width_{N}/{sample_id}/affine_matrix.csv)
     seg_method: str
         proteomics segmentation method. Only "mesmer" is supported for now. Default: "mesmer"
     max_dist: float

@@ -262,8 +262,8 @@ def contains_name(name, query):
     name: name searched in, e.g. a Xenium donor or run folder name.
     query: name searched for, e.g. a proteomics donor or sample name.
     Returns True when query appears in name as whole "_"-separated tokens, ignoring case and
-    reading "-" as "_": donor_01 is in donor_01 and in
-    output-XETG..__donor_01__.., but not in donor_011.
+    reading "-" as "_": LUNG-0042 is in LUNG_0042_SLIDE2 and in
+    output-<instrument>__LUNG_0042_SLIDE2__<date>, but not in LUNG_00421.
     """
     # normalize case and separators
     name, query = (str(s).lower().replace("-", "_") for s in (name, query))

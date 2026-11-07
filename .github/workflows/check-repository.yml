@@ -1,0 +1,36 @@
+name: check repository
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # configs must be generic: no absolute paths of a particular machine or cluster
+      - name: No machine-specific absolute paths
+        run: |
+          if git grep -nE '(^|[^A-Za-z0-9_.~-])/(work|scratch|users|home|data|mnt|nfs|gpfs)/[A-Za-z0-9_.-]+' -- ':!pixi.lock' ':!.github/'; then
+            echo "::error::absolute paths found (use placeholders such as /path/to/... or relative paths)"
+            exit 1
+          fi
+
+      # only the example dataset config is tracked
+      - name: No dataset configs besides the example
+        run: |
+          if git ls-files config | grep -vE '^config/(README\.md|example/)'; then
+            echo "::error::dataset configs belong outside the repository (see config/README.md)"
+            exit 1
+          fi
+
+      # notebooks are committed without outputs (images and logs of real data)
+      - name: No notebook outputs
+        run: |
+          git ls-files -z '*.ipynb' | xargs -0 -r python3 -c '
+          import json, sys
+          bad = [f for f in sys.argv[1:]
+                 if any(c.get("outputs") for c in json.load(open(f)).get("cells", []))]
+          print("\n".join(bad))
+          sys.exit(1 if bad else 0)
+          '

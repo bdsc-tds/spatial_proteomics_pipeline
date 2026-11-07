@@ -1,0 +1,13 @@
+cell_type,CD4,CD20,CD8A,CD3E,CD138,HLA-DR,CD11c,CD68,CD16,GranzymeB,CD163,PD-1,VISTA,PD-L1,LAG-3,CD45RA,PCNA,CD45RO,Ki-67,Beta-catenin,CD31,PTEN,PanCK,Vimentin,alphaSMA,CD45,E-Cadherin
+Epithelial,,,,,,,,,,,,,,,,,,,,,,,0.3,,,,1
+Malignant epithelial,,,,,,,,,,,,,,,,,,,,1,,,1,,,,1
+Cycling malignant epithelial,,,,,,,,,,,,,,,,,1,,1,1,,,1,,,,1
+Fibroblast,,,,,,,,,,,,,,,,,,,,,,,,1,0.8,,
+Smooth muscle,,,,,,,,,,,,,,,,,,,,,,,,,1,,
+Endothelial,,,,,,,,,,,,,,,,,,,,,1,,,,,,
+T/NK cell,0.5,,1,1,,,,,,0.5,,,,,,,,,,,,,,,,0.5,
+B cell,,1,,,,1,,,,,,,,,,,,,,,,,,,,0.5,
+Plasma cell,,,,,1,,,,,,,,,,,,,,,,,,,,,0.25,
+Macrophage,,,,,,,,1,,,1,,,,,,,,,,,,,,,0.5,
+Dendritic cell,,,,,,1,1,,,,,,,,,,,,,,,,,,,0.5,
+Neutrophil,,,,,,,,,1,,,,,,,,,,,,,,,,,0.5,

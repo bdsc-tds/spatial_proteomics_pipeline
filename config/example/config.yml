@@ -1,0 +1,88 @@
+# Example pipeline config. Copy this folder for your dataset (inside or outside the repository) and run
+# with: ./run.sh --configfile <your folder>/config.yml
+# Relative paths below are relative to the folder the pipeline is started from (the repository).
+
+# all results, figures and logs go here (usually a processed/ folder next to the raw data)
+output_path: /path/to/processed
+
+# sample sheet (tissue/panel/donor/sample), relative to this file.
+# Create/update it with: pixi run update-experiments --config <your folder>/config.yml
+experiments: experiments.yml
+
+# optional: samples every step runs on (last level of the sample_id); leave out for all samples
+# samples: [sample_01, sample_02]
+
+containers:
+  # Apptainer image built by reproducibility/build_container.sh (written to resources/ by default)
+  pixi: resources/pixi.sif
+
+# switch pipeline steps on/off (off: rules not loaded, later steps reuse its existing outputs)
+run:
+  image_preparation: true
+  background_subtraction: false  # COMET only; panels opt in with _background_subtraction in experiments.yml
+  segmentation: true      # masks, per-cell feature table, GeoJSON
+  xenium_alignment: false  # affine matrix + overlay plots, samples with a Xenium run only
+  cell_type_annotation: true  # cell types per segmentation method, for each method in cell_type_annotation: methods
+  dimensionality_reduction: true  # per-cell embeddings of every mask, for each method in dimensionality_reduction: methods
+
+segmentation:
+  methods: [mesmer, cellpose, virtues]  # one rule file each (workflow/rules/_segmentation/{method}.smk)
+  mesmer:
+    # Mesmer model, downloaded there on first use (MultiplexSegmentation from deepcell)
+    model_dir: resources/models/mesmer
+  cellpose:
+    # Cellpose 3 models, downloaded there on first use
+    model_dir: resources/models/cellpose
+    model: cyto3          # whole-cell model, run on membrane + nuclear
+    nuclear_model: nuclei # nuclear model, run on the nuclear signal
+    # expected diameters, converted to pixels with the image's pixel size (starting values, tune)
+    diameter_um: 10
+    nuclear_diameter_um: 6
+  virtues:
+    # channel -> protein per panel: virtues/{panel}.csv next to this file (channel_name, uniprot_id; blank = not used)
+    # VirTues weights (Hugging Face bunnelab/virtues) and ESM-2, downloaded there on first use
+    model_dir: resources/models/virtues
+    model: virtues-sp32   # backbone + segmentation head (CC BY-NC 4.0)
+    resolution_um: 1.0    # VirTues' training resolution, images are resampled to it
+    upper_quantile: 0.99  # per-channel clipping inside the tissue before log1p (spora standardization)
+    blur_sigma: 1.0       # 3 x 3 Gaussian blur after standardization (VirTues paper preprocessing; 0 = none)
+
+xenium_alignment:
+  methods: [insitupy]
+  max_match_dist_um: 5  # max distance for matching proteomics and Xenium cells in the plots (all methods)
+  # default Xenium segmentation the proteomics cells are matched to (summary labels / file names): a folder
+  # name under processed/segmentation/ of xenium_analysis_pipeline, e.g. 10x_mm_5um (Xenium Ranger
+  # multimodal cell segmentation) or nuclear_expansion
+  xenium_segmentation: 10x_mm_5um
+  insitupy:
+    min_good_matches_per_area: 5
+    # images are shrunk to about max_width² px for feature matching; one output folder per value
+    # codex: max_width set to the proteomics image size, so only the Xenium image is shrunk
+    max_width: [4000, 8000]
+    # max_width of the summary plot comparing the segmentation methods
+    summary_max_width: 8000
+
+cell_type_annotation:
+  methods: [tacit, virtues]  # one rule file each (workflow/rules/_cell_type_annotation/{method}.smk); virtues labels the VirTues mask only
+  # Xenium segmentation (processed/segmentation/{seg} of xenium_analysis_pipeline) whose cells also get
+  # cell types and embeddings, for panels with _technology: xenium
+  xenium_segmentation: 10x_mm_5um
+  # signature per panel: signatures/{panel}.csv next to this file (cell_type, then one column per marker)
+  tacit:
+    cofactor: 150  # arcsinh(x / cofactor) of the proteomics intensities
+    xenium_cofactor: 5  # same for 10x's protein intensities (TACIT on the Xenium cells of samples imaged on Xenium)
+    r: 20          # clustering resolution (higher = more, smaller microclusters)
+    p: 15          # number of UMAP dimensions
+
+dimensionality_reduction:
+  methods: [kronos2, virtues]  # one rule file each (workflow/rules/_dimensionality_reduction/{method}.smk); virtues settings in segmentation: virtues
+  kronos2:
+    # channel -> KRONOS2 marker name per panel: kronos2/{panel}.csv next to this file (channel_name, kronos2_marker; blank = not used)
+    # local copy of Hugging Face MahmoodLab/KRONOS2 (gated, CC BY-NC-ND 4.0): download it once with `hf download` (README)
+    model_dir: resources/models/kronos2
+    box_size: 64  # px box around each cell centroid, at native resolution (CORAL's KRONOS2 recipe)
+
+gpu:
+  available: true  # false: GPU rules run on the CPU partition
+  partition_name: gpu  # SLURM partition(s) for mesmer, cellpose and kronos2 (comma-separated list allowed)
+  virtues_partition_name: gpu  # VirTues needs flash-attn, i.e. Ampere or newer GPUs (e.g. A100, L40, H100)

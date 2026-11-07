@@ -1,0 +1,36 @@
+channel_name,kronos2_marker
+DAPI,DAPI
+ATP1A1/CD45/E-Cadherin,
+18S,
+alphaSMA/Vimentin,
+Blue background,
+Green background,
+Yellow background,
+Red background,
+CD4,CD4
+CD20,CD20
+CD8A,CD8
+CD3E,CD3e
+CD138,CD138
+HLA-DR,HLA_DR
+CD11c,CD11C
+CD68,CD68
+CD16,CD16
+GranzymeB,granzymeb
+CD163,CD163
+PD-1,PD1
+VISTA,VISTA
+PD-L1,PDL1
+LAG-3,LAG3
+CD45RA,CD45RA
+PCNA,
+CD45RO,CD45RO
+Ki-67,KI67
+Beta-catenin,B-CATENIN
+CD31,CD31
+PTEN,PTEN
+PanCK,panCK
+Vimentin,VIMENTIN
+alphaSMA,A-SMA
+CD45,CD45
+E-Cadherin,E-CADHERIN

@@ -1,42 +1,51 @@
 # Configuration
 
-One folder per dataset, each with two files:
+One folder per dataset, holding a `config.yml`, its `experiments.yml` and the per-panel tables:
 
 ```
-config/
-  configs_codex/
-    config.yml         output_path, container, run: switches, method settings
-    experiments.yml    samples (tissue -> panel -> donor -> [samples]) and per-panel metadata
-  configs_xenium_mm/   Xenium RNA + protein (xenium_mm_10x), Mesmer + Cellpose on the protein channels
-  config.yml -> configs_codex/config.yml     the active dataset (symlink)
+<dataset folder>/
+  config.yml                  output_path, container, run: switches, method settings
+  experiments.yml             samples (tissue -> panel -> donor -> [samples]) and per-panel metadata
+  signatures/{panel}.csv      TACIT cell type signatures (cell_type, then one column per marker)
+  virtues/{panel}.csv         channel -> UniProt ID for VirTues (channel_name, uniprot_id)
+  kronos2/{panel}.csv         channel -> KRONOS2 marker (channel_name, kronos2_marker)
+  channel_names/{panel}.csv   COMET only: raw channel name -> clean name after background subtraction
 ```
 
-`experiments:` in `config.yml` points to its `experiments.yml`, relative to the `config.yml` file.
+Every path in the folder (`experiments:` in `config.yml` and the panel tables) is read relative to
+`config.yml`, so the folder can live anywhere, e.g. in a private repository next to your analysis code.
 
-## Choosing the dataset
-
-The SLURM profile reads `config/config.yml`. Point the symlink to the dataset to run:
-
-```bash
-ln -sfn configs_codex/config.yml config/config.yml
-```
-
-or leave the symlink and pass another config for one run:
-
-```bash
-./run.sh --configfile config/configs_comet/config.yml
-```
+`example/` is a template with the tables of five panels: CODEX `human_IO60_metabolism` and `indepth_45plex`,
+COMET `spyre_io_core_14plx`, and Xenium protein `hImmune_v1_Colon_100g` and `hImmune_v1_Multi_100g`. The
+signatures of the three CODEX/COMET panels only list the markers and still need cell type rows.
 
 ## Adding a dataset
 
-1. Copy an existing folder: `cp -r config/configs_codex config/configs_<name>`.
-2. In `config.yml`, set `output_path` (the `processed/` folder next to the raw data) and the `run:`
-   switches.
+1. Copy the template: `cp -r config/example <dataset folder>`.
+2. In `config.yml`, set `output_path`, the container and model paths, and the `run:` switches.
 3. Remove the copied `experiments.yml` and generate a new one from the raw data:
    ```bash
-   pixi run update-experiments --config config/configs_<name>/config.yml \
+   pixi run update-experiments --config <dataset folder>/config.yml \
        --base_path <raw> [--xenium_base_path <xenium raw>] --dry-run
    ```
    then run it again without `--dry-run` and fill in the `_` metadata of each new panel.
+4. Add the panel tables of your panels (keep or adapt the ones of `example/`).
+
+## Choosing the dataset
+
+Pass the config of the dataset to run:
+
+```bash
+./run.sh --configfile <dataset folder>/config.yml
+```
+
+Without `--configfile`, the profile reads `config/config.yml`. Everything in `config/` except this README
+and `example/` is ignored by git, so dataset folders (or symlinks to them) can be kept there, with
+`config/config.yml` as a symlink to the active one:
+
+```bash
+ln -s /path/to/my_dataset config/my_dataset
+ln -sfn my_dataset/config.yml config/config.yml
+```
 
 See the main [README](../README.md) for the meaning of every key.

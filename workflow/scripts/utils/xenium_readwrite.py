@@ -1,8 +1,7 @@
-"""Xenium readers shared with the analysis_repo repository.
+"""Xenium readers: read_xenium_sample() and the helpers it calls.
 
-read_xenium_sample() and the helpers it calls are copied verbatim from
-analysis_repo/workflow/scripts/general/readwrite.py (commit 444fdc4), so that Xenium data is read
-the same way in both projects. Do not edit them here: change them there and copy them over again.
+They read Xenium Ranger and Proseg outputs as laid out by xenium_analysis_pipeline
+(https://github.com/bdsc-tds/xenium_analysis_pipeline), optionally with its RCTD cell type annotations.
 
 Kept separate from readwrite.py because it needs spatialdata, which the spacec environment (Mesmer)
 does not have.
@@ -85,7 +84,7 @@ def add_ct_labels(adata,
 
     adata : anndata.AnnData
         Anndata object with added cell type annotation in .obs dataframe. The cell type columns are named {ct_ref}_{ct_level} (e.g. "ref1_Level1") and contain the "first_type" column from the RCTD output for the specified level of granularity.
-        The "spot_class" column is always added as {ct_level}_spot_class, and with full_post_processed_info the extra post-processing columns are added as {ct_level}_{column}. In both cases the level name is trimmed to the level number (e.g. "Level4_partner" -> "Level4_spot_class").
+        The "spot_class" column is always added as {ct_level}_spot_class, and with full_post_processed_info the extra post-processing columns are added as {ct_level}_{column}. In both cases the level name is trimmed to the level number (e.g. "Level4_custom" -> "Level4_spot_class").
 
     """
 
@@ -128,7 +127,7 @@ def add_ct_labels(adata,
 
         ct_df[f'{lvl}_{ct_ref}'] = ct_df["first_type"]
 
-        # trim the level name down to the level number (e.g. "Level4_partner" -> "Level4")
+        # trim the level name down to the level number (e.g. "Level4_custom" -> "Level4")
         lvl_short = re.sub(r"(\d+).*$", r"\1", lvl)
 
         # always carry the spot_class of the level, plus the extra post-processing columns if requested

@@ -1,0 +1,41 @@
+# Example sample sheet: tissue -> panel -> donor -> [samples]. Keys starting with "_" are metadata.
+# Images are found at {_base_path}/{tissue}/{panel}/{donor}/{sample}/ (the file ending in _image_ext).
+# Generate your own with: pixi run update-experiments --config <your folder>/config.yml --base_path <raw>
+_base_path: /path/to/proteomics/raw
+# optional: Xenium runs of the same sections, laid out as {_xenium_base_path}/{tissue}/{panel}/{donor}/{sample}/
+# (raw/ folder of xenium_analysis_pipeline)
+_xenium_base_path: /path/to/xenium/raw
+
+lung:
+  human_IO60_metabolism:  # CODEX / PhenoCycler
+    _technology: codex
+    _image_ext: qptiff
+    _pixel_size_um: 0.5073566  # fallback when the image carries no pixel size
+    _nuclear_channels: [DAPI, PCNA]  # combined (max) into the nuclear signal; the first is used for alignment
+    # whole-cell signal for Mesmer, covering epithelium, immune cells, stroma, endothelium
+    _membrane_channels: [Pan-Cytokeratin, E-cadherin, Vimentin, CD31, SMA, CD68, CD3e]
+    _background_subtraction: false
+    # donor: [samples]
+    donor_01: [sample_01]
+    donor_02: [sample_02a, sample_02b]
+
+  spyre_io_core_14plx:  # COMET / Lunaphore
+    _technology: comet
+    _image_ext: ome.tif
+    _pixel_size_um: 0.28
+    _nuclear_channels: [DAPI]
+    # channel names after background subtraction (channel_names/{panel}.csv maps the raw names)
+    _membrane_channels: [Pan-Cytokeratin, SMA, CD68, CD3e, CD45]
+    _background_subtraction: true
+    donor_03: [sample_03]
+
+colon:
+  hImmune_v1_Colon_100g:  # Xenium RNA + protein (protein channels imaged on the Xenium slide)
+    _technology: xenium
+    # the first morphology_focus file opens the whole multi-file OME-TIFF; the sample folder is the Xenium output folder
+    _image_ext: morphology_focus/ch0000_dapi.ome.tif
+    _pixel_size_um: 0.2125
+    _nuclear_channels: [DAPI, Ki-67, PCNA]
+    _membrane_channels: [PanCK, E-Cadherin, CD45, Vimentin, alphaSMA, CD31, CD3E]
+    _background_subtraction: false
+    donor_04: [sample_04]

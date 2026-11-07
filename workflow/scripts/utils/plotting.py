@@ -17,19 +17,17 @@ from matplotlib import font_manager
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# tissue (first part of the sample ID) colours: cols_tissue in analysis_repo's plotting_utils.py,
-# NSCLC from its cols_cancer_type
+# fixed colours of some tissues (first part of the sample ID); any other tissue gets a default palette colour
 tissue_cols = {"CRC": "#5696E8",
                "DLBCL": "#AA3F5DFF",
                "GBM": "#938467",
                "NSCLC": "#CC79A7"}
 
-# TACIT cell types of the Xenium MM protein panel coloured as the RNA Level2 cell types (cols_level2_mm
-# in analysis_repo's plotting_utils.py; lymphoid from Level3, cols_level3), same lineage hue families when
-# there is no RNA equivalent:
+# fixed colours of the TACIT cell types of the Xenium hImmune protein signatures (config/example/signatures/),
+# by lineage hue family; any other cell type gets a default palette colour:
 # lymphoid = blues (B / plasma indigo), myeloid = greens, stromal = browns, endothelial = gold, epithelial = purples,
-# malignant = reds
-TACIT_mm_cols = {# lymphoid (cols_level3)
+# malignant = reds. The trailing comments name the matching RNA cell type labels.
+TACIT_mm_cols = {# lymphoid
                  "T/NK cell": "#4A6FA5",                     # T_CD4, T_CD8, NK
                  "B cell": "#5C5A93",                        # B_cell
                  "Plasma cell": "#38366B",                   # Plasma

@@ -17,11 +17,11 @@ Raw images, one per sample folder:
 {raw}/{tissue}/{panel}/{donor}/{sample}/{sample}.{qptiff|ome.tiff|...}
 ```
 
-e.g. `codex/raw/NSCLC/human_IO60_metabolism/donor_01/donor_01/donor_01.qptiff`.
+e.g. `codex/raw/lung/human_IO60_metabolism/donor_01/sample_01/sample_01.qptiff`.
 Sample folders without an image yet (e.g. only a crop geojson) are ignored. The image may also sit
-in a subfolder of the sample folder, e.g. Xenium protein data (`config/configs_xenium_mm/`), where
-the sample folder is the Xenium output folder and the image is the multi-file OME-TIFF opened
-through `morphology_focus/ch0000_dapi.ome.tif` (see `_image_ext` below).
+in a subfolder of the sample folder, e.g. Xenium protein data, where the sample folder is the Xenium
+output folder and the image is the multi-file OME-TIFF opened through
+`morphology_focus/ch0000_dapi.ome.tif` (see `_image_ext` below).
 
 The sample ID used throughout is `tissue/panel/donor/sample`. All results go to a `processed/`
 folder next to `raw/` (`output_path` in the config), one folder per analysis:
@@ -40,6 +40,13 @@ processed/
   snkmt.db                                          run monitoring database
 ```
 
+### Xenium data
+
+The Xenium steps (alignment to Xenium, and cell types / embeddings of 10x's own cells for Xenium
+protein data) read the outputs of [xenium_analysis_pipeline](https://github.com/bdsc-tds/xenium_analysis_pipeline):
+raw Xenium runs in `{xenium raw}/{tissue}/{panel}/{donor}/{sample}/` and its segmentations in
+`processed/segmentation/{segmentation}/...` next to that `raw/` folder.
+
 ## Setup
 
 The pipeline is designed to run on HPC clusters and has been tested with SLURM. Every rule runs
@@ -49,25 +56,28 @@ inside one Apptainer image that holds the pixi environments.
    ```bash
    pixi install -e snakemake -e default
    ```
-2. Build the container from `pixi.toml` / `pixi.lock` (a SLURM job, up to 4 h); the image path must match
-   `containers: pixi:` in the config:
+2. Fetch the VirTues source (git submodule) and build the container from `pixi.toml` / `pixi.lock`
+   (a SLURM job, up to 4 h). The image is written to `resources/pixi.sif` (or `OUTPUT_DIR`), which
+   must match `containers: pixi:` in the config:
    ```bash
+   git submodule update --init
    sbatch reproducibility/build_container.sh
    ```
    Changes to `pixi.toml` only reach the rules after the image is rebuilt.
+3. Adapt `profiles/slurm/config.v8+.yaml` to your cluster (CPU partition, folders to bind into the
+   container), or keep your own copy of the profile (see [Running](#running)).
 
 ## Configuration
 
-One folder per dataset under `config/`, e.g. `config/configs_codex/`, holding a `config.yml` and an
-`experiments.yml`.
+One folder per dataset, holding a `config.yml`, an `experiments.yml` and the per-panel tables. Start
+from the template in [config/example/](config/example/); the folder can live anywhere, since every
+path in it is read relative to `config.yml` (see [config/README.md](config/README.md)).
 
 ### config.yml
 
 `output_path`, the container, the `run:` switches and method settings (segmentation / alignment
-methods, Mesmer / Cellpose model folders and Cellpose models and diameters, matching distance, GPU
-partition). Only the segmentation methods listed in `segmentation: methods` need a settings block.
-
-`config/config.yml` is a symlink to the active dataset's config (see [config/README.md](config/README.md)).
+methods, model folders, Cellpose models and diameters, matching distance, GPU partitions). Only the
+segmentation methods listed in `segmentation: methods` need a settings block.
 
 ### experiments.yml
 
@@ -76,7 +86,7 @@ The samples, as tissue → panel → donor → `[samples]`. Keys starting with `
 ```yaml
 _base_path: /path/to/codex/raw                 # raw images
 _xenium_base_path: /path/to/xenium/raw         # optional: Xenium runs of the same slides
-NSCLC:
+lung:
   human_IO60_metabolism:
     _technology: codex
     _image_ext: qptiff                          # image file extension in each sample folder
@@ -84,7 +94,7 @@ NSCLC:
     _nuclear_channels: [DAPI]                   # nuclear signal for segmentation; the first one is used for alignment
     _membrane_channels: [Pan-Cytokeratin, E-cadherin, CD45, Vimentin, CD31, SMA]   # whole-cell signal for segmentation
     _background_subtraction: false              # COMET only
-    donor_01: [donor_01]          # donor: [samples]
+    donor_01: [sample_01]                       # donor: [samples]
 ```
 
 `_image_ext` is how the image path inside the sample folder ends: an extension (`qptiff`,
@@ -97,8 +107,8 @@ The file can be written by hand, or generated from the raw data folder with `upd
 (before the first run and whenever new samples arrive):
 
 ```bash
-pixi run update-experiments --config config/configs_codex/config.yml --dry-run   # show changes
-pixi run update-experiments --config config/configs_codex/config.yml             # write them
+pixi run update-experiments --config <dataset folder>/config.yml --dry-run   # show changes
+pixi run update-experiments --config <dataset folder>/config.yml             # write them
 ```
 
 (first time, when experiments.yml does not exist yet, also pass `--base_path <raw>` and optionally
@@ -119,16 +129,19 @@ contains its donor and whose donor or sample contains its sample (case-insensiti
 ## Running
 
 ```bash
-./run.sh -n                                              # dry run: list the jobs
-./run.sh                                                 # run with the active config
-./run.sh <rule or output file>                           # only that target
+./run.sh --configfile <dataset folder>/config.yml -n     # dry run: list the jobs
+./run.sh --configfile <dataset folder>/config.yml        # run
+./run.sh --configfile <dataset folder>/config.yml <rule or output file>   # only that target
 ```
 
-`run.sh` loads `singularityce`, starts Snakemake from the `snakemake` pixi environment with the SLURM
-profile (`profiles/slurm/`, one job per rule, cluster-generic executor) and `--sdm apptainer`, and
-stores the monitoring database in `{output_path}/snkmt.db`. 
+Without `--configfile`, `config/config.yml` is used. `run.sh` loads Apptainer (from an environment
+module if it is not on `PATH`), starts Snakemake from the `snakemake` pixi environment with the SLURM
+profile (one job per rule, cluster-generic executor) and `--sdm apptainer`, and stores the monitoring
+database in `{output_path}/snkmt.db`. The profile is `profiles/slurm/`, unless `--profile <folder>` is
+passed or `SNAKEMAKE_PROFILE` is set, so a cluster-specific copy can be kept outside the repository.
 
-Some rules run on the `gpu` partition:  (set `gpu: available: false` in the config to use CPUs). 
+The GPU rules (Mesmer, Cellpose, VirTues, KRONOS2) run on the partitions set under `gpu:` in the config
+(set `gpu: available: false` to run them on CPUs).
 
 ## Steps
 
@@ -171,8 +184,8 @@ subtraction is the exception: its switch also chooses the image every step reads
   `segmentation/<method>/{sample_id}/`, add `quantify_cells_<method>` and `mask_to_geojson_<method>`
   to `_segmentation/quantify_cells.smk` (`use rule quantify_cells_mesmer as quantify_cells_<method>
   with:`, changing the paths), and list the method in `segmentation: methods`.
-- **New dataset:** copy `config/configs_codex/` to `config/configs_<name>/` and adapt `output_path`,
-  `_base_path` and the switches.
+- **New dataset:** copy `config/example/` to a folder of your own and adapt `output_path`,
+  `_base_path`, the panel tables and the switches (see [config/README.md](config/README.md)).
 
 ## Repository layout
 
@@ -181,7 +194,7 @@ run.sh                                   launch the pipeline on SLURM
 pixi.toml, pixi.lock                     environments (default, spacec, tacit, gpu, snakemake)
 reproducibility/                         container definition and build script
 profiles/slurm/config.v8+.yaml           Snakemake SLURM profile
-config/configs_<dataset>/                config.yml + experiments.yml per dataset
+config/example/                          template dataset config: config.yml, experiments.yml, panel tables
 workflow/
   Snakefile                              samples, helpers, run switches, rule all
   rules/<topic>.smk                      includes + run switch -> rules map
@@ -195,7 +208,7 @@ workflow/
 
 - Xenium runs are matched to samples by donor and sample name (see above); data whose names do not
   contain each other may need an explicit mapping.
-- The COMET dataset config (`config/configs_comet/`) is not written yet.
+- The Xenium steps expect the folder layout of xenium_analysis_pipeline (see [Xenium data](#xenium-data)).
 
 ## License
 

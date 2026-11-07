@@ -1,13 +1,13 @@
-# Set the executor to cluster-generic
-# do not change this!!
+# Snakemake profile for SLURM clusters: every rule is submitted as one sbatch job (cluster-generic executor).
+# Adapt the marked values to your cluster, or keep your own copy of this folder and pass it to run.sh
+# with --profile <folder> (or set SNAKEMAKE_PROFILE).
 executor: cluster-generic
 
-# this specifies the flags passes to sbatch. With this your workflow can be run by just typing snakemake --profile path to the folder which contains the current file.
-# this allows for resources to be specified in the rules in the Snakefile. They can also be set in this file as with profiles (see below)
+# sbatch flags; partition, threads, memory, runtime and slurm_extra come from each rule's resources
+# (defaults below). Add e.g. --account=<account> or --qos=<qos> here if your cluster requires them.
 cluster-generic-submit-cmd:
   sbatch
     --partition={resources.partition}
-    --qos={resources.qos}
     --cpus-per-task={threads}
     --job-name=smk-{rule}
     --parsable
@@ -17,21 +17,22 @@ cluster-generic-submit-cmd:
     --time={resources.runtime}
     {resources.slurm_extra}
 
-
-# this enables to cancel all jobs submitted by the pipeline when you cancel scancel the bash script running Snakemake
+# cancelling run.sh (Ctrl-C) cancels all jobs submitted by the pipeline
+cluster-generic-cancel-cmd: scancel
+cluster-generic-cancel-nargs: 1000
 jobs: 500
 retries: 0
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
 printshellcmds: True
-cluster-generic-cancel-cmd: scancel
-cluster-generic-cancel-nargs: 1000
 keep-going: true
 rerun-triggers: [mtime, params, code]
 rerun-incomplete: true
 sdm: apptainer
-apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full --bind /path/to/data --bind /path/to/scratch"
-# the active dataset config (symlink to config/configs_*/config.yml); override with --configfile
+# every folder outside the repository that holds raw data, outputs, the container or models must be
+# bound into the container: add one --bind <folder> per location (adapt to your cluster)
+apptainer-args: "--nv --cleanenv --no-home --env RUST_BACKTRACE=full"
+# the active dataset config (see config/README.md); override with --configfile
 configfile: config/config.yml
 logger: snkmt
 # run.sh overrides this with {output_path}/snkmt.db of the active config
@@ -41,9 +42,7 @@ use-singularity: true
 
 
 default-resources:
-  partition: cpu
-  account: <account>
-  qos: cpu-normal
+  partition: cpu  # adapt: your cluster's CPU partition
   threads: 1
   mem_mb: 5120
   runtime: 240

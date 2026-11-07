@@ -2,7 +2,7 @@
 
 Run before the first pipeline execution, and again whenever new samples arrive:
 
-    python workflow/scripts/utils/update_experiments.py --config config/configs_codex/config.yml --dry-run
+    python workflow/scripts/utils/update_experiments.py --config <dataset folder>/config.yml --dry-run
 
 - Scans {_base_path}/{tissue}/{panel}/{donor}/{sample}/ for sample folders holding one image and
   adds the ones missing from experiments.yml, as `donor: [sample, ...]`.
