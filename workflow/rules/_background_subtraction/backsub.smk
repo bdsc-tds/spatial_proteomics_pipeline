@@ -23,8 +23,8 @@ rule background_subtraction:
         markerout=background_subtraction_dir + "markerout.csv",
     threads: 1
     resources:
-        runtime=480,
-        mem='64G',
+        runtime=90,
+        mem='24G',
     log:
         background_subtraction_dir + "logs/backsub.log"
     container:
