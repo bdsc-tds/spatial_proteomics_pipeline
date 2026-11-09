@@ -1,8 +1,8 @@
 """VirTues cell type of every cell of the VirTues mask, from the segmentation head's cell type logits.
 
-Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that only the None
-(background) logit is suppressed and Unknown is kept as a cell type: every 1 µm pixel takes its most likely
-remaining class, and every cell takes the majority class of its pixels
+Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that no logit is suppressed
+(the demo suppresses None and Unknown): every class, None (background) and Unknown included, is a cell type.
+Every 1 µm pixel takes its most likely class, and every cell takes the majority class of its pixels
 (virtues.utils.segmentation.assign_cell_types). The mask is brought to the logits' 1 µm grid as in
 virtues_embeddings.py, by centre sampling (each 1 µm pixel takes the label of the full-resolution pixel at its
 centre); cells covering no 1 µm pixel centre get no cell type.
@@ -16,10 +16,6 @@ import argparse
 import numpy as np
 import pandas as pd
 import tifffile
-
-# classes suppressed before the argmax: the background class only (the demo also suppresses Unknown)
-SUPPRESSED = ["None"]
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -40,14 +36,13 @@ def centre_sample(mask, height_1um, width_1um):
 def main():
     args = parse_args()
 
-    # logits and the classes kept (None suppressed); keep_default_na=False keeps "None" a string
+    # logits and class names in logit order; keep_default_na=False keeps "None" a string
     logits = tifffile.imread(args.logits)
     classes = pd.read_csv(args.classes, keep_default_na=False).sort_values("class_index")
-    keep = classes.loc[~classes["cell_type"].isin(SUPPRESSED), "class_index"].to_numpy()
-    names = classes.set_index("class_index").loc[keep, "cell_type"].to_numpy()
+    names = classes["cell_type"].to_numpy()
 
-    # most likely kept class of every 1 µm pixel (index into keep, = argmax with the suppressed logits at -inf)
-    pixel_class = logits[keep].argmax(axis=0)
+    # most likely class of every 1 µm pixel
+    pixel_class = logits.argmax(axis=0)
     del logits
 
     # 1 µm mask on the logits' grid (centre sampling)
@@ -57,8 +52,8 @@ def main():
     del mask
 
     # pixels of every (label, class) pair, as assign_cell_types
-    counts = np.bincount((mask_1um * len(keep) + pixel_class).ravel(), minlength=(mask_1um.max() + 1) * len(keep))
-    counts = counts.reshape(-1, len(keep))
+    counts = np.bincount((mask_1um * len(names) + pixel_class).ravel(), minlength=(mask_1um.max() + 1) * len(names))
+    counts = counts.reshape(-1, len(names))
 
     # majority class per cell present at 1 µm, its pixel fraction as confidence
     cells = np.flatnonzero(counts[1:].sum(axis=1) > 0) + 1
