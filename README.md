@@ -134,7 +134,9 @@ contains its donor and whose donor or sample contains its sample (case-insensiti
 ./run.sh --configfile <dataset folder>/config.yml <rule or output file>   # only that target
 ```
 
-Without `--configfile`, `config/config.yml` is used. `run.sh` loads Apptainer (from an environment
+Without `--configfile`, `config/config.yml` is used: it is not tracked by git, so symlink your dataset's
+config there first (`ln -sfn /abs/path/to/<dataset folder>/config.yml config/config.yml`; not a hard link or
+copy, since paths in it are resolved relative to the real file). `run.sh` loads Apptainer (from an environment
 module if it is not on `PATH`), starts Snakemake from the `snakemake` pixi environment with the SLURM
 profile (one job per rule, cluster-generic executor) and `--sdm apptainer`, and stores the monitoring
 database in `{output_path}/snkmt.db`. The profile is `profiles/slurm/`, unless `--profile <folder>` is
