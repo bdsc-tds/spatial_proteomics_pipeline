@@ -21,7 +21,7 @@ rule background_subtraction:
         image=BACKSUB_IMAGE,
         markers=background_subtraction_dir + "markers.csv",
         markerout=background_subtraction_dir + "markerout.csv",
-    threads: 4
+    threads: 1
     resources:
         runtime=480,
         mem='64G',
