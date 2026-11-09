@@ -235,7 +235,7 @@ def main():
     names = pd.Series({s: s.split("/")[-1] for s in df["sample_id"].unique()})
     names[names.duplicated(keep=False)] = names.index[names.duplicated(keep=False)]
     df["sample"] = df["sample_id"].map(names)
-    # categorical max_width (ordered numerically, "codex" last) for the fill / x axis, one facet per method
+    # categorical max_width (ordered numerically, "codex" / "comet" last) for the fill / x axis, one facet per method
     # combination (alignment / proteomics segmentation / Xenium segmentation)
     widths = sorted(df["max_width"].unique(), key=lambda w: (not w.isdigit(), int(w) if w.isdigit() else 0))
     df["max_width"] = pd.Categorical(df["max_width"].astype(str), categories=[str(w) for w in widths], ordered=True)

@@ -46,8 +46,8 @@ rule align_to_xenium_insitupy:
         min_good_matches=config["xenium_alignment"]["insitupy"]["min_good_matches_per_area"],
     resources:
         # codex: SIFT on the full-size image (~23k² px) runs out of memory at 50G
-        runtime=lambda wildcards: 45 if wildcards.max_width == 'codex' else 30,
-        mem=lambda wildcards: '160G' if wildcards.max_width == 'codex' else '40G'
+        runtime=lambda wildcards: {'codex': 45, 'comet': 180}.get(wildcards.max_width, 30),
+        mem=lambda wildcards: {'codex': '160G', 'comet': '160G'}.get(wildcards.max_width, '40G')
     log:
         insitupy_dir + "logs/align_to_xenium_insitupy.log"
     container:

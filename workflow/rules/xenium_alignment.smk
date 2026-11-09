@@ -10,7 +10,7 @@ ALIGN_MAX_WIDTHS = config["xenium_alignment"]["insitupy"]["max_width"]
 
 wildcard_constraints:
     align_method="|".join(re.escape(m) for m in ALIGN_METHODS),
-    max_width=r"\d+|codex",
+    max_width=r"\d+|codex|comet",
 
 # --- Rules ---
 include: "_xenium_alignment/insitupy.smk"
