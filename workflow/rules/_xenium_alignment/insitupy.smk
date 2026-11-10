@@ -1,5 +1,5 @@
-# Register the proteomics DAPI onto the Xenium DAPI with insitupy, then match cells and plot per
-# segmentation method. Samples with a Xenium run only. SEG_METHODS: Snakefile
+# Register the proteomics DAPI onto the Xenium DAPI with insitupy (affine, optional local refinement), then match
+# cells and plot per segmentation method. Samples with a Xenium run only. SEG_METHODS: Snakefile
 
 # variables defined in other .smk files:
 # os:                   imported in Snakefile
@@ -15,6 +15,9 @@
 # {max_width}: px size of the shrunk copies used for feature matching, one folder per value
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
 insitupy_dir = OUT + "/xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/"
+
+# local refinement after the affine (run, grid, work_max_px, max_shift_um); when run, the cell matching uses it
+REFINE = config["xenium_alignment"]["insitupy"]["refine"]
 
 
 def xenium_dir(wildcards):
@@ -68,6 +71,42 @@ rule align_to_xenium_insitupy:
         &> {log}
         """
 
+# local refinement: residual shift per tile after the affine (SIFT + RANSAC on both DAPIs), as control points
+rule refine_alignment_insitupy:
+    input:
+        script=f"{workflow.basedir}/scripts/_xenium_alignment/local_refinement.py",
+        # from align_to_xenium_insitupy
+        registered=insitupy_dir + "dapi_registered.ome.tif",
+        xenium=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
+    output:
+        control_points=insitupy_dir + "local_refinement/control_points.csv",
+        figure=insitupy_dir + "figures/local_refinement.png",
+    params:
+        xenium_dir=xenium_dir,
+        grid=REFINE["grid"],
+        work_max_px=REFINE["work_max_px"],
+        max_shift_um=REFINE["max_shift_um"],
+    resources:
+        runtime=30,
+        mem='16G',
+    log:
+        insitupy_dir + "logs/refine_alignment_insitupy.log"
+    container:
+        config["containers"]["pixi"]
+    shell:
+        """
+        {PX} python -u {input.script} \
+        --registered {input.registered} \
+        --xenium_dir {params.xenium_dir} \
+        --grid {params.grid} \
+        --work_max_px {params.work_max_px} \
+        --max_shift_um {params.max_shift_um} \
+        --sample_id {wildcards.sample_id} \
+        --out_control_points {output.control_points} \
+        --out_figure {output.figure} \
+        &> {log}
+        """
+
 # match aligned proteomics cells to Xenium cells; overlay and count plots per segmentation method
 rule plot_alignment:
     input:
@@ -75,6 +114,8 @@ rule plot_alignment:
         # from quantify_cells_{seg_method}
         feature_table=OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
         affine=xenium_alignment_dir + "affine_matrix.csv",
+        # from refine_alignment_insitupy, when refine: run
+        control_points=[xenium_alignment_dir + "local_refinement/control_points.csv"] if REFINE["run"] else [],
         xenium_cells=lambda wc: os.path.join(xenium_dir(wc), "cells.parquet"),
         xenium_experiment=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
         # other Xenium segmentations of the sample (processed folder), cell numbers only
@@ -92,6 +133,7 @@ rule plot_alignment:
         # name=output dir of each other Xenium segmentation
         xenium_segs=lambda wc: [f"{seg}={d}" for seg, (d, _) in XENIUM_SEGS[wc.sample_id].items()],
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
+        control_points=lambda wc, input: f"--control_points {input.control_points}" if REFINE["run"] else "",
     resources:
         runtime=30,
         mem='8G',
@@ -104,6 +146,7 @@ rule plot_alignment:
         {PX} python {input.script} \
         --feature_table {input.feature_table} \
         --affine {input.affine} \
+        {params.control_points} \
         --xenium_dir {params.xenium_dir} \
         --xenium_segs {params.xenium_segs:q} \
         --max_dist {params.max_dist} \
@@ -144,6 +187,7 @@ rule plot_alignment_summary:
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
         xenium_seg=config["xenium_alignment"]["xenium_segmentation"],
         summary_max_width=config["xenium_alignment"]["insitupy"]["summary_max_width"],
+        refine="--refine" if REFINE["run"] else "", # Proseg matching with the local refinement
         figures_dir=xenium_alignment_summary_dir + "figures",
     resources:
         # Proseg cells of every Xenium run read in turn
@@ -163,6 +207,7 @@ rule plot_alignment_summary:
         --max_dist {params.max_dist} \
         --xenium_seg {params.xenium_seg} \
         --summary_max_width {params.summary_max_width} \
+        {params.refine} \
         --out_table {output.table} \
         --out_figures_dir {params.figures_dir} \
         --out_boxplot {output.boxplot} \
@@ -176,3 +221,5 @@ rule xenium_alignment_all:
         expand(rules.plot_alignment.output, align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
                seg_method=SEG_METHODS, sample_id=XENIUM_SAMPLE_IDS),
         expand(rules.plot_alignment_summary.output, align_method=ALIGN_METHODS),
+        expand(rules.refine_alignment_insitupy.output, max_width=ALIGN_MAX_WIDTHS,
+               sample_id=XENIUM_SAMPLE_IDS) if REFINE["run"] else [],

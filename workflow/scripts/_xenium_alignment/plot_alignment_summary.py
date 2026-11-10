@@ -7,7 +7,8 @@ method; the wildcards are recovered from the paths, relative to --root (OUT/xeni
   {align_method}/max_width_{max_width}/{sample_id}/figures/{seg_method}/counts.csv
 For every sample whose Xenium run also has a Proseg segmentation
 (xenium/processed/segmentation/proseg/<raw run path>/raw_results), the proteomics cells are matched
-to the Proseg cells as well, with the same functions as plot_alignment.py. Samples without a Proseg
+to the Proseg cells as well, with the same functions as plot_alignment.py (and the local refinement's
+control points with --refine). Samples without a Proseg
 folder are skipped.
 Writes:
   - the table of matched fractions (one row per counts table)
@@ -50,6 +51,8 @@ def parse_args():
     parser.add_argument("--seg_root", required=True, help="OUT/segmentation, with {seg_method}/{sample_id}/feature_table.csv")
     parser.add_argument("--experiments", required=True, help="experiments.yml, for the Xenium run of each sample")
     parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
+    parser.add_argument("--refine", action="store_true",
+                        help="apply the local refinement (local_refinement/control_points.csv) after the affine")
     parser.add_argument("--xenium_seg", default="multimodal",
                         help="name of the default Xenium segmentation of the counts tables (e.g. nuclear_expansion)")
     parser.add_argument("--summary_max_width", default="codex",
@@ -103,8 +106,10 @@ def proseg_counts(df, samples, args):
         # aligned proteomics cells matched to the Proseg cells, per alignment / max_width / segmentation
         for r in df_sample.itertuples():
             feature_table = os.path.join(args.seg_root, r.seg_method, sample_id, "feature_table.csv")
-            affine = os.path.join(args.root, r.align_method, f"max_width_{r.max_width}", sample_id, "affine_matrix.csv")
-            cells, aligned_um = align_proteomics_cells(feature_table, affine, pdir)
+            align_dir = os.path.join(args.root, r.align_method, f"max_width_{r.max_width}", sample_id)
+            control_points = os.path.join(align_dir, "local_refinement", "control_points.csv") if args.refine else None
+            cells, aligned_um = align_proteomics_cells(feature_table, os.path.join(align_dir, "affine_matrix.csv"),
+                                                       pdir, control_points)
             matches = match_cells(cells, aligned_um, xenium, args.max_dist)
             rows.append({
                 "align_method": r.align_method,

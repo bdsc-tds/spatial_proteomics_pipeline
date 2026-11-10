@@ -33,7 +33,7 @@ processed/
   segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose, virtues)
   segmentation/virtues/{sample_id}/                 + image_1um.npy, channel_stats.csv (cell mask only, no nuclei / cytoplasm)
   segmentation/virtues/panels/{panel}/              marker_embeddings.pt, standardization.csv
-  xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, {seg_method}_cell_matches.csv, figures/, logs/
+  xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, local_refinement/control_points.csv, {seg_method}_cell_matches.csv, figures/, logs/
   cell_type_annotation/{ct_method}/{seg_method}/{sample_id}/  cell_types.csv, logs/  (tacit; also xenium_{seg} for 10x's cells)
   dimensionality_reduction/{dr_method}/{seg_method}/{sample_id}/  cell_embeddings.h5, logs/  (virtues, kronos2; also xenium_{seg} for 10x's cells)
   dimensionality_reduction/xenium_{seg}/{sample_id}/  cell_boundaries_mask.tif, cell_ids.csv (10x's cells as a label mask)
@@ -152,7 +152,7 @@ The GPU rules (Mesmer, Cellpose, VirTues, KRONOS2) run on the partitions set und
 | `image_preparation` | `prepare_dapi`, `prepare_segmentation_input` | Writes the channel table, a DAPI image for alignment and a two-channel (nuclear, membrane) segmentation input from the raw image. |
 | `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/), and all later steps read the subtracted image. |
 | `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Segments cells with each method in `segmentation: methods` (Mesmer, Cellpose 3, VirTues) and writes masks, per-cell mean intensities of every channel and GeoJSON outlines. |
-| `xenium_alignment` | `align_to_xenium_insitupy`, `plot_alignment` | Registers the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy) and matches cells to Xenium cells (samples with a Xenium run only). |
+| `xenium_alignment` | `align_to_xenium_insitupy`, `refine_alignment_insitupy`, `plot_alignment` | Registers the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy) (affine), optionally refines it locally (one residual shift per tile, thin-plate spline between them; `xenium_alignment: insitupy: refine`) and matches cells to Xenium cells (samples with a Xenium run only). |
 | `cell_type_annotation` | `tacit_{seg_method}`, `tacit_xenium` | Assigns cell types with TACIT (`signatures/{panel}.csv`) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
 | `dimensionality_reduction` | `{dr_method}_embeddings_{seg_method}`, `xenium_cell_mask`, `{dr_method}_embeddings_xenium` | Computes per-cell embeddings with VirTues and/or KRONOS2 for every segmentation method's cells, and for 10x's own cells on Xenium samples. |
 

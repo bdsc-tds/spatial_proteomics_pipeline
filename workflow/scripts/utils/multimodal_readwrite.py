@@ -8,7 +8,9 @@ Also usable outside the pipeline, to load a Xenium sample together with its alig
 # measured on the same section, as processed by the spatial_proteomics_pipeline:
 #   processed/segmentation/{seg_method}/{sample_id}/feature_table.csv + *_boundaries.geojson
 #   processed/xenium_alignment/{align_method}/max_width_{N}/{sample_id}/affine_matrix.csv
-# The affine matrix maps proteomics image pixels onto Xenium morphology pixels.
+#   (+ local_refinement/control_points.csv when the local refinement is run)
+# The affine matrix maps proteomics image pixels onto Xenium morphology pixels; the control points then move
+# them locally (apply_local_refinement).
 # xenium_readwrite.py (same folder) must be importable, i.e. on sys.path, before importing this module.
 
 import os
@@ -17,6 +19,7 @@ import re
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import shapely
 import anndata as ad
 import muon as mu
 from spatialdata.models import ShapesModel, TableModel
@@ -65,6 +68,53 @@ def apply_affine(xy, matrix):
     xy = np.asarray(xy, dtype=float)
     homogeneous = np.column_stack([xy, np.ones(len(xy))])
     return (homogeneous @ np.asarray(matrix, dtype=float).T)[:, :2]
+
+
+def apply_local_refinement(xy, control_points, n_iter=10):
+    """
+    Move points already in Xenium morphology pixels (after apply_affine) by the local refinement of the
+    alignment (local_refinement.py).
+
+    The refinement's control points are the residual shifts (dx, dy) measured at tile centres (cx, cy) on a
+    downsampled working grid. A thin-plate spline through them gives a shift d at every position: the content
+    at Xenium position p sits at p + d(p) in the affine-registered proteomics image. A proteomics point c is
+    therefore moved to the p with p + d(p) = c, found by fixed-point iteration p <- c - d(p).
+
+    Arguments
+    ---------
+    xy: (N, 2) array
+        x, y in Xenium morphology pixels, after the affine
+    control_points: str
+        control_points.csv of the refinement
+        ({output_path}/xenium_alignment/insitupy/max_width_{N}/{sample_id}/local_refinement/control_points.csv);
+        rows with kept == False are ignored
+    n_iter: int
+        fixed-point iterations. Default: 10
+
+    Returns
+    -------
+    (N, 2) array of refined x, y in Xenium morphology pixels. Unchanged if fewer than 4 control points are kept.
+    """
+    from scipy.interpolate import RBFInterpolator
+
+    xy = np.asarray(xy, dtype=float)
+    cps = pd.read_csv(control_points)
+    cps = cps[cps["kept"]]
+    if len(cps) < 4:
+        print(f"{len(cps)} control points in {control_points}: no local refinement")
+        return xy.copy()
+
+    # thin-plate spline through the control points, on the working grid (as fitted by run_alignment.py)
+    rbf = RBFInterpolator(cps[["cx", "cy"]].to_numpy(), cps[["dx", "dy"]].to_numpy(),
+                          kernel="thin_plate_spline", smoothing=1.0)
+    scale = cps[["scale_x", "scale_y"]].to_numpy()[0]
+
+    # solve p + d(p) = c on the working grid by fixed-point iteration
+    c = xy * scale
+    p = c.copy()
+    for _ in range(n_iter):
+        p = c - rbf(p)
+    return p / scale
 
 
 def mesmer_feature_table_to_adata(feature_table, dapi_to_obs=True):
@@ -137,6 +187,7 @@ def _xenium_um_to_global(sdata, pixel_size):
 def read_xenium_proteomics_sample(xenium_path,
                                   seg_dir,
                                   affine,
+                                  control_points=None,
                                   seg_method="mesmer",
                                   max_dist=5,
                                   protein_cell_boundaries=False,
@@ -147,7 +198,8 @@ def read_xenium_proteomics_sample(xenium_path,
                                   **xenium_kwargs):
     """
     Load a Xenium sample together with the spatial proteomics (COMET, CODEX) segmentation of the same
-    section, bring the proteomics cells into Xenium coordinates with the image alignment affine matrix,
+    section, bring the proteomics cells into Xenium coordinates with the image alignment affine matrix
+    (and the local refinement, if control_points is given),
     and match them to the Xenium cells by spatial mutual nearest neighbours.
 
     Returns a MuData object ("rna", "prot") when no spatial element is requested, or a SpatialData
@@ -168,6 +220,10 @@ def read_xenium_proteomics_sample(xenium_path,
     affine: str
         3x3 affine matrix (.csv) mapping proteomics image pixels onto Xenium morphology pixels
         ({output_path}/xenium_alignment/{align_method}/max_width_{N}/{sample_id}/affine_matrix.csv)
+    control_points: str, optional
+        control_points.csv of the local refinement, applied after the affine (see apply_local_refinement):
+        ({output_path}/xenium_alignment/insitupy/max_width_{N}/{sample_id}/local_refinement/control_points.csv).
+        Default: None (affine only)
     seg_method: str
         proteomics segmentation method. Only "mesmer" is supported for now. Default: "mesmer"
     max_dist: float
@@ -212,7 +268,11 @@ def read_xenium_proteomics_sample(xenium_path,
     # proteomics cells with their centroids aligned to Xenium µm
     adata_prot = mesmer_feature_table_to_adata(os.path.join(seg_dir, "feature_table.csv"), dapi_to_obs=dapi_to_obs)
     matrix = np.loadtxt(affine, delimiter=",")
-    xy_aligned = apply_affine(adata_prot.obs[["x_px", "y_px"]].to_numpy(), matrix) * xenium_pixel_size_um
+    xy_aligned = apply_affine(adata_prot.obs[["x_px", "y_px"]].to_numpy(), matrix)
+    # local refinement after the affine (Xenium px)
+    if control_points is not None:
+        xy_aligned = apply_local_refinement(xy_aligned, control_points)
+    xy_aligned = xy_aligned * xenium_pixel_size_um
     adata_prot.obs["x_centroid_aligned"] = xy_aligned[:, 0]
     adata_prot.obs["y_centroid_aligned"] = xy_aligned[:, 1]
     print(f"{adata_rna.n_obs} Xenium cells, {adata_prot.n_obs} {seg_method} cells")
@@ -254,10 +314,15 @@ def read_xenium_proteomics_sample(xenium_path,
     sdata["table_rna"] = adata_rna
     sdata = _sync_shapes_to_table(sdata, "table_rna", adata_rna, is_proseg=is_proseg)
 
-    # proteomics pixels -> Xenium pixels -> Xenium µm -> "global" of the Xenium sdata
-    to_global = Sequence([Affine(matrix, input_axes=("x", "y"), output_axes=("x", "y")),
-                          Scale([xenium_pixel_size_um, xenium_pixel_size_um], axes=("x", "y")),
-                          _xenium_um_to_global(sdata, xenium_pixel_size_um)])
+    # Xenium pixels -> Xenium µm -> "global" of the Xenium sdata
+    px_to_global = [Scale([xenium_pixel_size_um, xenium_pixel_size_um], axes=("x", "y")),
+                    _xenium_um_to_global(sdata, xenium_pixel_size_um)]
+    # affine only: proteomics pixels -> Xenium pixels as a transformation of the shapes; with the local
+    # refinement (not expressible as one) the vertices are moved to Xenium pixels instead
+    if control_points is None:
+        to_global = Sequence([Affine(matrix, input_axes=("x", "y"), output_axes=("x", "y"))] + px_to_global)
+    else:
+        to_global = Sequence(px_to_global)
 
     # proteomics boundaries of the matched cells
     prot_ids = adata_prot.obs["protein_cell_id"].to_numpy()
@@ -265,6 +330,10 @@ def read_xenium_proteomics_sample(xenium_path,
         if not load:
             continue
         gdf = read_mesmer_boundaries(os.path.join(seg_dir, MESMER_BOUNDARY_FILES[key]), cell_ids=prot_ids)
+        # every vertex: affine, then local refinement (Xenium px)
+        if control_points is not None:
+            gdf["geometry"] = shapely.transform(
+                gdf.geometry.values, lambda xy: apply_local_refinement(apply_affine(xy, matrix), control_points))
         sdata.shapes[f"{seg_method}_{key}"] = ShapesModel.parse(gdf, transformations={"global": to_global})
         print(f"loaded {len(gdf)} {seg_method} {key}")
 

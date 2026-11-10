@@ -61,6 +61,13 @@ xenium_alignment:
     max_width: [4000, 8000]
     # max_width of the summary plot comparing the segmentation methods
     summary_max_width: 8000
+    # local refinement after the affine: one residual shift per tile (SIFT + RANSAC on both DAPIs), thin-plate
+    # spline between them, applied to the cell centroids (plot_alignment, read_xenium_proteomics_sample)
+    refine:
+      run: true
+      grid: 12  # tiles per side
+      work_max_px: 6000  # long side of the downsampled DAPIs the tiles are matched on
+      max_shift_um: 100  # control points shifted more are dropped as wrong fits
 
 cell_type_annotation:
   methods: [tacit, virtues]  # one rule file each (workflow/rules/_cell_type_annotation/{method}.smk); virtues labels the VirTues mask only

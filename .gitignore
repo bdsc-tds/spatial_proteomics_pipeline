@@ -16,6 +16,10 @@ resources/
 # optional local Helvetica (commercial font, not redistributable; see workflow/scripts/utils/plotting.py)
 workflow/scripts/utils/fonts/
 
+# scratch and docs folder
+workflow/scratch
+workflow/docs/
+
 # pixi environments (pixi.lock is tracked, it is baked into the container)
 .pixi/
 

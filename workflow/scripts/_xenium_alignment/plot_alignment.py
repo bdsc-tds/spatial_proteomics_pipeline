@@ -1,7 +1,7 @@
 """Bring the proteomics cells into Xenium coordinates, match them to Xenium cells and plot the result.
 
 The proteomics centroids (pixels of the proteomics image) are mapped with the alignment matrix to
-Xenium morphology pixels, then to µm with the Xenium pixel size from experiment.xenium. Cells are
+Xenium morphology pixels, moved by the local refinement when --control_points is given, then to µm with the Xenium pixel size from experiment.xenium. Cells are
 matched as mutual nearest neighbours within --max_dist µm. Reading, alignment and matching use the
 helpers of utils/multimodal_readwrite.py and utils/xenium_readwrite.py, so the matches are the same
 as those of read_xenium_proteomics_sample. Writes:
@@ -32,7 +32,7 @@ from plotnine import (aes, element_rect, element_text, geom_col, geom_text, ggpl
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
 from plotting import FONT, savefig, savefig_plotnine, set_mpl_rcparams
-from multimodal_readwrite import apply_affine, mesmer_feature_table_to_adata, xenium_pixel_size
+from multimodal_readwrite import apply_affine, apply_local_refinement, mesmer_feature_table_to_adata, xenium_pixel_size
 from xenium_readwrite import match_cells_spatial_mnn, read_xenium_sample
 
 
@@ -40,6 +40,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feature_table", required=True, help="quantify_cells output (cell_id, x_px, y_px, ...)")
     parser.add_argument("--affine", required=True, help="3x3 matrix, proteomics px -> Xenium px")
+    parser.add_argument("--control_points", default=None,
+                        help="control_points.csv of the local refinement, applied after the affine (optional)")
     parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (cells table, experiment.xenium)")
     parser.add_argument("--xenium_segs", nargs="*", default=[],
                         help="name=output dir of other Xenium segmentations (10x cells.parquet or Proseg cell-metadata.csv.gz), cell numbers only")
@@ -54,16 +56,20 @@ def parse_args():
     return parser.parse_args()
 
 
-def align_proteomics_cells(feature_table, affine, xenium_dir):
+def align_proteomics_cells(feature_table, affine, xenium_dir, control_points=None):
     """Proteomics cells (feature table metadata) and their centroids in Xenium µm, as in
     read_xenium_proteomics_sample (multimodal_readwrite). xenium_dir can be a 10x output folder or a
-    Proseg raw_results folder (the pixel size then comes from the matching raw Xenium run)."""
+    Proseg raw_results folder (the pixel size then comes from the matching raw Xenium run). control_points:
+    local refinement applied after the affine (None: affine only)."""
     # Xenium pixel size from experiment.xenium
     pixel_size = xenium_pixel_size(xenium_dir)
-    # proteomics centroids: proteomics px -> Xenium px -> Xenium µm
+    # proteomics centroids: proteomics px -> Xenium px (affine, then local refinement) -> Xenium µm
     cells = mesmer_feature_table_to_adata(feature_table).obs
     matrix = np.loadtxt(affine, delimiter=",")
-    aligned_um = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix) * pixel_size
+    aligned_px = apply_affine(cells[["x_px", "y_px"]].to_numpy(), matrix)
+    if control_points is not None:
+        aligned_px = apply_local_refinement(aligned_px, control_points)
+    aligned_um = aligned_px * pixel_size
     print(f"{len(cells)} proteomics cells, Xenium pixel size {pixel_size} µm/px")
     return cells, aligned_um
 
@@ -136,7 +142,7 @@ def main():
     set_mpl_rcparams()
 
     # proteomics centroids in Xenium µm
-    cells, aligned_um = align_proteomics_cells(args.feature_table, args.affine, args.xenium_dir)
+    cells, aligned_um = align_proteomics_cells(args.feature_table, args.affine, args.xenium_dir, args.control_points)
 
     # Xenium centroids (µm)
     xenium = read_xenium_cells(args.xenium_dir)
