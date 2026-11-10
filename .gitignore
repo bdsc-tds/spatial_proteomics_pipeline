@@ -17,7 +17,7 @@ resources/
 workflow/scripts/utils/fonts/
 
 # scratch and docs folder
-workflow/scratch
+workflow/scratch/
 workflow/docs/
 
 # pixi environments (pixi.lock is tracked, it is baked into the container)
