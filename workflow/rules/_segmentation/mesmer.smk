@@ -2,6 +2,7 @@
 # Quantified in quantify_cells.smk
 
 # variables defined in other .smk files:
+# os, np, tifffile: imported in Snakefile
 # OUT:           defined in Snakefile
 # GPU_PARTITION: defined in Snakefile
 # GPU_EXTRA:     defined in Snakefile
@@ -24,7 +25,8 @@ rule segmentation_mesmer:
     resources:
         # both input planes and the masks in memory
         runtime=360,
-        mem='120G',
+        mem=lambda wc, input: f"{12 + 42 * np.prod(tifffile.TiffFile(input.image).series[0].shape[-2:]) / 1e9:.0f}G"
+            if os.path.exists(input.image) else '130G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
