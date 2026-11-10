@@ -168,6 +168,8 @@ def main():
 
     # cells of the other Xenium segmentations, name=dir
     other_segs = dict(s.split("=", 1) for s in args.xenium_segs)
+    # a processed copy of the default 10x_mm_5um segmentation is already counted as the matched Xenium run
+    other_segs.pop("10x_mm_5um", None)
     other_ncells = {seg: count_xenium_cells(d) for seg, d in sorted(other_segs.items())}
 
     # counts of every Xenium segmentation, proteomics, matched and unmatched proteomics cells (matches
