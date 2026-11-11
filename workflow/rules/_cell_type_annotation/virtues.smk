@@ -1,5 +1,5 @@
 # VirTues cell types of every mask: the majority class of every cell's 1 µm pixels in the VirTues segmentation
-# head's cell type logits (all classes kept, None and Unknown included, unlike VirTues' segmentation demo).
+# head's cell type logits, with the None (background) logit suppressed (Unknown kept, unlike VirTues' segmentation demo).
 # The virtues rule is the base, the mesmer and cellpose masks derive from it with `use rule` (all inputs restated).
 # Samples imaged on Xenium also label 10x's own cells, from the mask exported by xenium_cell_mask
 # (_dimensionality_reduction/xenium_cells.smk)

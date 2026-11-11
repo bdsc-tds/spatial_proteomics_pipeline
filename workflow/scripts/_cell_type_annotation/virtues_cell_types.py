@@ -1,8 +1,8 @@
 """VirTues cell type of every cell of a mask (VirTues' own, or 10x's cells), from the segmentation head's logits.
 
-Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that no logit is suppressed
-(the demo suppresses None and Unknown): every class, None (background) and Unknown included, is a cell type.
-Every 1 µm pixel takes its most likely class, and every cell takes the majority class of its pixels
+Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that only the None
+(background) logit is suppressed (the demo suppresses None and Unknown): Unknown stays a cell type.
+Every 1 µm pixel takes its most likely non-None class, and every cell takes the majority class of its pixels
 (virtues.utils.segmentation.assign_cell_types). The mask is brought to the logits' 1 µm grid as in
 virtues_embeddings.py, by centre sampling (each 1 µm pixel takes the label of the full-resolution pixel at its
 centre); cells covering no 1 µm pixel centre get no cell type.
@@ -42,7 +42,8 @@ def main():
     classes = pd.read_csv(args.classes, keep_default_na=False).sort_values("class_index")
     names = classes["cell_type"].to_numpy()
 
-    # most likely class of every 1 µm pixel
+    # most likely non-None class of every 1 µm pixel
+    logits[names == "None"] = -np.inf
     pixel_class = logits.argmax(axis=0)
     del logits
 
