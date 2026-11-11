@@ -1,4 +1,4 @@
-"""VirTues cell type of every cell of the VirTues mask, from the segmentation head's cell type logits.
+"""VirTues cell type of every cell of a mask (VirTues' own, or 10x's cells), from the segmentation head's logits.
 
 Follows VirTues' segmentation demo (notebooks/3_demo_segmentation.ipynb), except that no logit is suppressed
 (the demo suppresses None and Unknown): every class, None (background) and Unknown included, is a cell type.
@@ -7,7 +7,7 @@ Every 1 µm pixel takes its most likely class, and every cell takes the majority
 virtues_embeddings.py, by centre sampling (each 1 µm pixel takes the label of the full-resolution pixel at its
 centre); cells covering no 1 µm pixel centre get no cell type.
 
-Writes one row per cell: cell_id (mask label), cell_type, confidence (pixel fraction of that class) and the pixel
+Writes one row per cell: cell_id (mask label, or the 10x cell_id of --cell_ids), cell_type, confidence (pixel fraction of that class) and the pixel
 fraction of every class.
 """
 
@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument("--logits", required=True, help="cell type logits (classes x Y x X at 1 µm, segmentation_virtues)")
     parser.add_argument("--classes", required=True, help="class index -> cell type (classes.csv)")
     parser.add_argument("--mask", required=True, help="cell label mask on the image's pixel grid (tiled TIFF)")
+    parser.add_argument("--cell_ids", default="", help="label -> cell_id table (CSV); empty = cell_id is the label")
     parser.add_argument("--out_csv", required=True)
     return parser.parse_args()
 
@@ -59,8 +60,16 @@ def main():
     cells = np.flatnonzero(counts[1:].sum(axis=1) > 0) + 1
     fractions = counts[cells] / counts[cells].sum(axis=1, keepdims=True)
     print(f"mask {mask_1um.shape} at 1 µm: {len(cells)} of {n_cells} cells kept", flush=True)
+
+    # mask labels -> 10x cell_ids (Xenium cells), else the label itself
+    cell_ids = cells
+    if args.cell_ids:
+        id_table = pd.read_csv(args.cell_ids).set_index("label")["cell_id"]
+        print(f"{np.isin(cells, id_table.index).sum()} of {len(cells)} labels in {args.cell_ids}", flush=True)
+        cell_ids = id_table.reindex(cells).to_numpy()
+
     table = pd.DataFrame({
-        "cell_id": cells,
+        "cell_id": cell_ids,
         "cell_type": names[fractions.argmax(axis=1)],
         "confidence": fractions.max(axis=1),
     })
