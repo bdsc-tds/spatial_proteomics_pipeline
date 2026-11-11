@@ -1,5 +1,6 @@
-# VirTues cell types of the VirTues mask: the majority class of every cell's 1 µm pixels in the segmentation
+# VirTues cell types of every mask: the majority class of every cell's 1 µm pixels in the VirTues segmentation
 # head's cell type logits (all classes kept, None and Unknown included, unlike VirTues' segmentation demo).
+# The virtues rule is the base, the mesmer and cellpose masks derive from it with `use rule` (all inputs restated).
 # Samples imaged on Xenium also label 10x's own cells, from the mask exported by xenium_cell_mask
 # (_dimensionality_reduction/xenium_cells.smk)
 
@@ -67,9 +68,36 @@ use rule virtues_cell_types_virtues as virtues_cell_types_xenium with:
     log:
         OUT + "/cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/virtues_cell_types.log"
 
-# VirTues cell types of the VirTues mask of every sample it segments, and of the Xenium cells (samples imaged on Xenium)
+use rule virtues_cell_types_virtues as virtues_cell_types_mesmer with:
+    input:
+        script=f"{workflow.basedir}/scripts/_cell_type_annotation/virtues_cell_types.py",
+        # from segmentation_virtues (logits and class names)
+        logits=OUT + "/segmentation/virtues/{sample_id}/class_logits.tif",
+        classes=OUT + "/segmentation/virtues/{sample_id}/classes.csv",
+        # from segmentation_mesmer
+        mask=OUT + "/segmentation/mesmer/{sample_id}/cell_boundaries_mask.tif",
+    output:
+        cell_types=OUT + "/cell_type_annotation/virtues/mesmer/{sample_id}/cell_types.csv",
+    log:
+        OUT + "/cell_type_annotation/virtues/mesmer/{sample_id}/logs/virtues_cell_types.log"
+
+use rule virtues_cell_types_virtues as virtues_cell_types_cellpose with:
+    input:
+        script=f"{workflow.basedir}/scripts/_cell_type_annotation/virtues_cell_types.py",
+        # from segmentation_virtues (logits and class names)
+        logits=OUT + "/segmentation/virtues/{sample_id}/class_logits.tif",
+        classes=OUT + "/segmentation/virtues/{sample_id}/classes.csv",
+        # from segmentation_cellpose
+        mask=OUT + "/segmentation/cellpose/{sample_id}/cell_boundaries_mask.tif",
+    output:
+        cell_types=OUT + "/cell_type_annotation/virtues/cellpose/{sample_id}/cell_types.csv",
+    log:
+        OUT + "/cell_type_annotation/virtues/cellpose/{sample_id}/logs/virtues_cell_types.log"
+
+# VirTues cell types of every method in segmentation: methods, and of the Xenium cells (samples imaged on Xenium)
 rule virtues_all:
     input:
-        expand(OUT + "/cell_type_annotation/virtues/virtues/{sample_id}/cell_types.csv", sample_id=SAMPLE_IDS),
+        expand(OUT + "/cell_type_annotation/virtues/{seg_method}/{sample_id}/cell_types.csv",
+               seg_method=SEG_METHODS, sample_id=SAMPLE_IDS),
         expand(OUT + "/cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv",
                sample_id=VIRTUES_XENIUM_SAMPLE_IDS),
