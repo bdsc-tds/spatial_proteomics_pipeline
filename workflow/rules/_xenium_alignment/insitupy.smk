@@ -86,6 +86,7 @@ rule refine_alignment_insitupy:
         grid=REFINE["grid"],
         work_max_px=REFINE["work_max_px"],
         max_shift_um=REFINE["max_shift_um"],
+        max_neighbour_dev_um=REFINE["max_neighbour_dev_um"],
     resources:
         runtime=30,
         mem='16G',
@@ -101,6 +102,7 @@ rule refine_alignment_insitupy:
         --grid {params.grid} \
         --work_max_px {params.work_max_px} \
         --max_shift_um {params.max_shift_um} \
+        --max_neighbour_dev_um {params.max_neighbour_dev_um} \
         --sample_id {wildcards.sample_id} \
         --out_control_points {output.control_points} \
         --out_figure {output.figure} \

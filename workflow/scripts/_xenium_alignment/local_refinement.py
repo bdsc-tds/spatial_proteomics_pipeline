@@ -8,12 +8,16 @@ align_to_xenium_insitupy, same Xenium pixel grid):
      every side (skipped if blank)
   3. per window: SIFT keypoints, Lowe ratio test, 4-parameter similarity (rotation, scale, shift) with RANSAC
   4. the shift of the tile centre under that fit is the tile's control point; control points shifted by more
-     than --max_shift_um are dropped (wrong fits: the thin-plate spline would pass through them exactly)
+     than --max_shift_um, or differing by more than --max_neighbour_dev_um from the median shift of their
+     neighbouring tiles, are dropped (wrong fits: the thin-plate spline would pass through them exactly). Real
+     local moves (a tissue fragment) are shared by neighbouring tiles; wrong fits, mostly on tiles with little
+     tissue, are isolated.
 The control points are applied to cell coordinates with multimodal_readwrite.apply_local_refinement (thin-plate
 spline through them). Per-tile loop adapted from run_alignment.py (estimate_residual_field) by a colleague.
 Writes:
   - control_points.csv: one row per tile with a fit: centre (cx, cy) and shift (dx, dy) in working-grid px,
-    scale_x / scale_y (working-grid px per Xenium px), shift_um, n_inliers, kept (False: > --max_shift_um)
+    scale_x / scale_y (working-grid px per Xenium px), shift_um, n_inliers, neighbour_dev_um, kept (False:
+    dropped by either guard)
   - a QC figure: control points over both DAPIs, and the magnitude of the resulting field
 """
 
@@ -51,6 +55,8 @@ def parse_args():
     parser.add_argument("--grid", type=int, default=12, help="tiles per side")
     parser.add_argument("--work_max_px", type=int, default=6000, help="long side of the downsampled images (px)")
     parser.add_argument("--max_shift_um", type=float, default=100, help="control points shifted more are dropped")
+    parser.add_argument("--max_neighbour_dev_um", type=float, default=15,
+                        help="control points whose shift differs more from the median shift of their neighbours are dropped")
     parser.add_argument("--sample_id", default="", help="used in the figure title")
     parser.add_argument("--out_control_points", required=True)
     parser.add_argument("--out_figure", required=True)
@@ -102,7 +108,23 @@ def tile_shifts(template, image, grid):
             moved = M[:, :2] @ centre + M[:, 2]
             rows.append(dict(cx=cx, cy=cy, dx=float(moved[0] - centre[0]), dy=float(moved[1] - centre[1]),
                              n_inliers=int(inliers.sum())))
-    return pd.DataFrame(rows, columns=["cx", "cy", "dx", "dy", "n_inliers"])
+    # explicit dtypes: with no fitted tile the empty frame would be object dtype, which the QC plot cannot draw
+    return pd.DataFrame(rows, columns=["cx", "cy", "dx", "dy", "n_inliers"]).astype(
+        {"cx": float, "cy": float, "dx": float, "dy": float, "n_inliers": int})
+
+
+def neighbour_deviation(cps, step_x, step_y, work_um):
+    """Distance (µm) between each control point's shift and the median shift of the control points on the
+    8 neighbouring tiles (tile spacing step_x, step_y working px); compared with zero shift without neighbours."""
+    cx, cy, d = cps["cx"].to_numpy(), cps["cy"].to_numpy(), cps[["dx", "dy"]].to_numpy()
+    dev = np.zeros(len(cps))
+    for i in range(len(cps)):
+        # neighbours: at most one tile step away in x and y
+        nb = (np.abs(cx - cx[i]) <= 1.01 * step_x) & (np.abs(cy - cy[i]) <= 1.01 * step_y)
+        nb[i] = False
+        med = np.median(d[nb], axis=0) if nb.any() else np.zeros(2)
+        dev[i] = np.hypot(*(d[i] - med)) * work_um
+    return dev
 
 
 def main():
@@ -125,12 +147,17 @@ def main():
     cps = tile_shifts(template, image, args.grid)
     cps["scale_x"], cps["scale_y"] = work_w / full_w, work_h / full_h
     cps["shift_um"] = np.hypot(cps["dx"], cps["dy"]) * work_um
-    cps["kept"] = cps["shift_um"] <= args.max_shift_um
+    within = cps["shift_um"] <= args.max_shift_um
+    # neighbour guard, among the points within max_shift_um
+    cps["neighbour_dev_um"] = np.nan
+    cps.loc[within, "neighbour_dev_um"] = neighbour_deviation(cps[within], work_w / args.grid, work_h / args.grid, work_um)
+    cps["kept"] = within & (cps["neighbour_dev_um"] <= args.max_neighbour_dev_um)
     cps.to_csv(args.out_control_points, index=False)
-    print(f"{len(cps)} of {args.grid ** 2} tiles fitted, {(~cps['kept']).sum()} dropped (> {args.max_shift_um} µm)")
+    print(f"{len(cps)} of {args.grid ** 2} tiles fitted, {(~within).sum()} dropped (> {args.max_shift_um:g} µm), "
+          f"{(within & ~cps['kept']).sum()} dropped (> {args.max_neighbour_dev_um:g} µm from their neighbours)")
     for r in cps[~cps["kept"]].itertuples():
         print(f"  dropped: centre ({r.cx / r.scale_x:.0f}, {r.cy / r.scale_y:.0f}) Xenium px, {r.shift_um:.1f} µm, "
-              f"{r.n_inliers} inliers")
+              f"{r.neighbour_dev_um:.1f} µm from neighbours, {r.n_inliers} inliers")
     kept = cps[cps["kept"]]
     if len(kept):
         print(f"kept shifts (µm): median {kept['shift_um'].median():.2f}, max {kept['shift_um'].max():.2f}")
@@ -148,7 +175,7 @@ def main():
     stretch = lambda a: to_uint8(a).astype(np.float32) / 255
     fig, axes = plt.subplots(1, 2, figsize=(12, 12 * work_h / work_w / 2 + 1.5), layout="constrained")
     axes[0].imshow(np.stack([stretch(template), stretch(image), stretch(template)], axis=-1), extent=ext)
-    for sel, color, label in [(cps["kept"], "cyan", "kept"), (~cps["kept"], "red", f"> {args.max_shift_um:g} µm, dropped")]:
+    for sel, color, label in [(cps["kept"], "cyan", "kept"), (~cps["kept"], "red", "dropped")]:
         c = cps[sel]
         x, y = c["cx"] / c["scale_x"] * pixel_size, c["cy"] / c["scale_y"] * pixel_size
         axes[0].plot(x, y, "o", ms=3, color=color, label=f"{label} ({len(c)})")
