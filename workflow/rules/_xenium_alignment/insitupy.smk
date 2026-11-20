@@ -25,8 +25,13 @@ def xenium_dir(wildcards):
 
 
 # Xenium segmentations of each sample, as named in the Xenium processed/segmentation folder:
-# {sample_id: {xenium_seg: (output dir, marker file)}}
-XENIUM_SEGS = {s: xenium_segmentations(SAMPLES[s]["xenium"]) for s in XENIUM_SAMPLE_IDS}
+# {sample_id: {xenium_seg: (output dir, marker file)}}. Folders named after a proteomics segmentation method
+# (e.g. mesmer, cellpose: Xenium RNA re-segmented with this pipeline's masks) are left out: they are built
+# from these outputs, and importing them would otherwise re-trigger plot_alignment
+XENIUM_SEGS = {
+    s: {seg: v for seg, v in xenium_segmentations(SAMPLES[s]["xenium"]).items() if seg not in SEG_METHODS}
+    for s in XENIUM_SAMPLE_IDS
+}
 
 
 rule align_to_xenium_insitupy:
@@ -134,6 +139,8 @@ rule plot_alignment:
         xenium_dir=xenium_dir,
         # name=output dir of each other Xenium segmentation
         xenium_segs=lambda wc: [f"{seg}={d}" for seg, (d, _) in XENIUM_SEGS[wc.sample_id].items()],
+        # label of the Xenium run's own segmentation, the one the proteomics cells are matched to
+        xenium_seg=config["xenium_alignment"]["xenium_segmentation"],
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
         control_points=lambda wc, input: f"--control_points {input.control_points}" if REFINE["run"] else "",
     resources:
@@ -151,6 +158,7 @@ rule plot_alignment:
         {params.control_points} \
         --xenium_dir {params.xenium_dir} \
         --xenium_segs {params.xenium_segs:q} \
+        --xenium_seg {params.xenium_seg} \
         --max_dist {params.max_dist} \
         --sample_id {wildcards.sample_id} \
         --out_matches {output.matches} \

@@ -8,8 +8,9 @@ as those of read_xenium_proteomics_sample. Writes:
   - the table of matched cells (proteomics cell_id, Xenium cell_id, distance in µm)
   - an overlay of Xenium and aligned proteomics centroids
   - per modality (Xenium, aligned proteomics), the matched and the unmatched cells side by side
-  - a bar plot of the number of cells of each Xenium segmentation (--xenium_segs, then the default
-    10x_mm_5um one), of proteomics, matched and unmatched proteomics cells
+  - a bar plot of the number of cells of each processed Xenium segmentation (--xenium_segs), of the
+    Xenium run's own segmentation the cells are matched to (labelled --xenium_seg), of proteomics,
+    matched and unmatched proteomics cells
   - a stacked bar of the fraction of proteomics cells matched / unmatched to a Xenium cell
 """
 
@@ -45,6 +46,8 @@ def parse_args():
     parser.add_argument("--xenium_dir", required=True, help="Xenium output folder (cells table, experiment.xenium)")
     parser.add_argument("--xenium_segs", nargs="*", default=[],
                         help="name=output dir of other Xenium segmentations (10x cells.parquet or Proseg cell-metadata.csv.gz), cell numbers only")
+    parser.add_argument("--xenium_seg", default="xenium",
+                        help="label of the segmentation of --xenium_dir (e.g. nuclear_expansion, multimodal)")
     parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
     parser.add_argument("--sample_id", default="", help="used in the plot titles")
     parser.add_argument("--out_matches", required=True)
@@ -174,19 +177,17 @@ def main():
 
     # cells of the other Xenium segmentations, name=dir
     other_segs = dict(s.split("=", 1) for s in args.xenium_segs)
-    # a processed copy of the default 10x_mm_5um segmentation is already counted as the matched Xenium run
-    other_segs.pop("10x_mm_5um", None)
     other_ncells = {seg: count_xenium_cells(d) for seg, d in sorted(other_segs.items())}
 
     # counts of every Xenium segmentation, proteomics, matched and unmatched proteomics cells (matches
-    # to the default 10x_mm_5um segmentation)
+    # to the segmentation of the Xenium run, --xenium_seg)
     counts = pd.DataFrame({
-        "modality": [*other_ncells, "10x_mm_5um", "proteomics", "matched", "unmatched"],
+        "modality": [*other_ncells, args.xenium_seg, "proteomics", "matched", "unmatched"],
         "ncells": [*other_ncells.values(), len(xenium), len(cells), len(matches), len(cells) - len(matches)],
     })
     counts["modality"] = pd.Categorical(counts["modality"], categories=counts["modality"], ordered=True)
     print(counts.to_string(index=False))
-    colors = {"10x_mm_5um": "#19618A", "proteomics": "#09B39C", "matched": "#2166AC", "unmatched": "#E66101"}
+    colors = {args.xenium_seg: "#19618A", "proteomics": "#09B39C", "matched": "#2166AC", "unmatched": "#E66101"}
     # other Xenium segmentations: shades of purple
     other_colors = ["#7B1FA2", "#BA68C8", "#4A148C", "#CE93D8"]
     colors.update({seg: other_colors[i % len(other_colors)] for i, seg in enumerate(other_ncells)})

@@ -77,7 +77,7 @@ def read_counts(path, root, xenium_seg):
         "sample_id": sample_id,
         "seg_method": seg_method,
         "xenium_seg": xenium_seg,
-        "n_xenium": ncells["10x_mm_5um"],
+        "n_xenium": ncells[xenium_seg],
         "n_proteomics": ncells["proteomics"],
         "n_matched": ncells["matched"],
     }
@@ -223,7 +223,7 @@ def main():
     args = parse_args()
     set_mpl_rcparams()
 
-    # matches to the default Xenium multimodal segmentation, per counts table
+    # matches to the segmentation of the Xenium run (--xenium_seg), per counts table
     df = pd.DataFrame([read_counts(p, args.root, args.xenium_seg) for p in args.counts])
 
     # matches to the Proseg Xenium segmentation, where it exists
