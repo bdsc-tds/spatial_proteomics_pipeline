@@ -3,6 +3,7 @@
 
 # variables defined in other .smk files:
 # os:                    imported in Snakefile
+# np:                    imported in Snakefile
 # re:                    imported in Snakefile
 # OUT:                   defined in Snakefile
 # CONFIG_PATH:           defined in Snakefile
@@ -146,7 +147,8 @@ rule segmentation_virtues:
     threads: 1
     resources:
         runtime=240,
-        mem='250G',
+        mem=lambda wc, input: f"{15 + 1550 * np.prod(np.load(input.image_1um, mmap_mode='r').shape[-2:]) / 1e9:.0f}G"
+            if os.path.exists(input.image_1um) else '250G',
         partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

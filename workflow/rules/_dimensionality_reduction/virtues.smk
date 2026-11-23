@@ -42,8 +42,8 @@ rule virtues_embeddings_mesmer:
         cell_ids="",  # cell_id = mask label
     threads: 1
     resources:
-        runtime=60,
-        mem='64G',
+        runtime=120,
+        mem='96G',
         partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:

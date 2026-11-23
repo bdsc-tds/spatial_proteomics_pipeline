@@ -5,7 +5,7 @@ segmentation head (Hugging Face bunnelab/virtues) tile by tile, and writes:
 - the whole-cell mask on the full-resolution pixel grid of the image (nearest neighbour from 1 µm), as a tiled
   TIFF like the other methods' masks (VirTues predicts no nuclei);
 - the head's cell type logits of every 1 µm pixel (classes x Y x X, float16, tiled TIFF), all classes kept
-  (None and Unknown are suppressed later, by virtues_cell_types.py), and the class names (classes.csv).
+  (virtues_cell_types.py keeps them all too), and the class names (classes.csv).
 """
 
 import argparse

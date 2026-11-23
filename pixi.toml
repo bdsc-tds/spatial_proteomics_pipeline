@@ -193,6 +193,7 @@ snakemake-interface-executor-plugins = "*"
 snakemake-interface-report-plugins = "*"
 snakemake-interface-storage-plugins = "*"
 snakemake-logger-plugin-snkmt = "*"
+tifffile = ">=2025.10,<2026"
 
 [feature.snakemake.pypi-dependencies]
 snkmt = "*"

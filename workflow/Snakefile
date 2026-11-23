@@ -18,6 +18,9 @@ import re
 import shlex
 import sys
 
+import numpy as np
+import tifffile
+
 sys.path.insert(0, f"{workflow.basedir}/scripts/utils")
 from experiments import get_samples, load_experiments, resolve_path, unlisted_samples, xenium_segmentations
 
