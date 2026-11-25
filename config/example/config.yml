@@ -27,6 +27,13 @@ run:
 
 segmentation:
   methods: [mesmer, cellpose, virtues]  # one rule file each (workflow/rules/_segmentation/{method}.smk)
+  # optional: Xenium segmentations as segmentation methods (xenium_{seg}), for samples with a Xenium run. The 10x
+  # cells are warped onto the proteomics image grid outside the pipeline; add xenium to methods to import them
+  xenium:
+    segmentations: [10x_5um]  # Xenium segmentation folder names -> methods xenium_10x_5um, ...
+    # folder of the warped masks per sample: {cell,nuclei,cytoplasm}_boundaries_mask.tif (int32, image grid) + cell_ids.csv (label, cell_id)
+    mask_dir: /path/to/warped_masks/{segmentation}/{sample_id}
+    samples: []  # sample ids or names (last level of the id); empty = every sample with a Xenium run
   mesmer:
     # Mesmer model, downloaded there on first use (MultiplexSegmentation from deepcell)
     model_dir: resources/models/mesmer
@@ -77,6 +84,7 @@ cell_type_annotation:
   xenium_segmentation: 10x_mm_5um
   # signature per panel: signatures/{panel}.csv next to this file (cell_type, then one column per marker)
   tacit:
+    seg_methods: [mesmer, cellpose]  # segmentation methods labelled (default: every method); the VirTues mask is left out
     cofactor: 150  # arcsinh(x / cofactor) of the proteomics intensities
     xenium_cofactor: 5  # same for 10x's protein intensities (TACIT on the Xenium cells of samples imaged on Xenium)
     r: 20          # clustering resolution (higher = more, smaller microclusters)
@@ -85,6 +93,7 @@ cell_type_annotation:
 dimensionality_reduction:
   methods: [kronos2, virtues]  # one rule file each (workflow/rules/_dimensionality_reduction/{method}.smk); virtues settings in segmentation: virtues
   kronos2:
+    seg_methods: [mesmer, cellpose]  # segmentation methods embedded (default: every method); the VirTues mask is left out
     # channel -> KRONOS2 marker name per panel: kronos2/{panel}.csv next to this file (channel_name, kronos2_marker; blank = not used)
     # local copy of Hugging Face MahmoodLab/KRONOS2 (gated, CC BY-NC-ND 4.0): download it once with `hf download` (README)
     model_dir: resources/models/kronos2

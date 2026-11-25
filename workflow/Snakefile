@@ -100,12 +100,6 @@ def gpu_threads(gpu=1, cpu=8):
     return gpu if GPU else cpu
 
 # --- rules ---
-# segmentation methods, also expanded by the alignment and cell type annotation rules
-SEG_METHODS = config["segmentation"]["methods"]
-
-wildcard_constraints:
-    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
-
 # cell type annotation methods (tacit), one rule file each
 CT_METHODS = config["cell_type_annotation"]["methods"]
 
@@ -138,6 +132,71 @@ def xenium_ct_seg_dir(sample_id):
     """Output folder of the XENIUM_CT_SEG segmentation of the sample's Xenium run (read_xenium_sample path), or None."""
     d = xenium_run_dir(sample_id)
     return xenium_segmentations(d).get(XENIUM_CT_SEG, (None, None))[0] if d else None
+
+
+# segmentation methods, also expanded by the alignment, cell type annotation and embedding rules. config
+# segmentation: methods lists rule files (_segmentation/{file}.smk); the xenium file adds one method
+# xenium_{seg} per Xenium segmentation in segmentation: xenium: segmentations (masks warped outside the pipeline)
+SEG_FILES = config["segmentation"]["methods"]
+XENIUM_SEG_CONFIG = (config["segmentation"].get("xenium") or {}) if "xenium" in SEG_FILES else {}
+XENIUM_SEG_NAMES = XENIUM_SEG_CONFIG.get("segmentations") or []
+SEG_METHODS = [m for m in SEG_FILES if m != "xenium"] + [f"xenium_{s}" for s in XENIUM_SEG_NAMES]
+# a method must not take the folder name of the 10x-cell variants (xenium_{XENIUM_CT_SEG}): both would write it
+if f"xenium_{XENIUM_CT_SEG}" in SEG_METHODS:
+    raise WorkflowError(f"segmentation: xenium: segmentations must not contain {XENIUM_CT_SEG}, the "
+                        "cell_type_annotation: xenium_segmentation (same output folders)")
+
+
+def xenium_seg_sample_ids(seg):
+    """Samples with a Xenium run that has segmentation seg, restricted to segmentation: xenium: samples
+    (sample ids or sample names, the last level of the id; empty = all)."""
+    selected = XENIUM_SEG_CONFIG.get("samples") or []
+    # every listed sample must exist (as a full sample id or a sample name)
+    _unknown = sorted(set(selected) - set(SAMPLE_IDS) - {s.split("/")[-1] for s in SAMPLE_IDS})
+    if _unknown:
+        raise WorkflowError(f"segmentation: xenium: samples: not in the samples: {_unknown}")
+    picked = [s for s in XENIUM_SAMPLE_IDS if not selected or s in selected or s.split("/")[-1] in selected]
+    # only samples whose Xenium run has that segmentation
+    return [s for s in picked if seg in xenium_segmentations(SAMPLES[s]["xenium"])]
+
+
+# what each method provides: its mask compartments and the samples it exists for
+SEG_METHOD_INFO = {m: {"compartments": ["cell"] if m == "virtues" else ["cell", "nuclei", "cytoplasm"],
+                       "samples": SAMPLE_IDS}
+                   for m in SEG_FILES if m != "xenium"}
+for _seg in XENIUM_SEG_NAMES:
+    SEG_METHOD_INFO[f"xenium_{_seg}"] = {"compartments": ["cell", "nuclei", "cytoplasm"],
+                                         "samples": xenium_seg_sample_ids(_seg)}
+    print(f"xenium_{_seg}: {len(SEG_METHOD_INFO[f'xenium_{_seg}']['samples'])} samples", file=sys.stderr)
+
+
+def seg_samples(method):
+    """Samples a segmentation method exists for."""
+    return SEG_METHOD_INFO[method]["samples"]
+
+
+def step_seg_methods(step_config):
+    """Segmentation methods a step runs on: its optional seg_methods list, else every method. A listed xenium_{seg}
+    method of segmentation: xenium while xenium is not in segmentation: methods is skipped."""
+    methods = step_config.get("seg_methods") or SEG_METHODS
+    # every entry must be a method, or a xenium_{seg} method configured but not switched on
+    _configured = {f"xenium_{s}" for s in (config["segmentation"].get("xenium") or {}).get("segmentations") or []}
+    _unknown = sorted(set(methods) - set(SEG_METHODS) - _configured)
+    if _unknown:
+        raise WorkflowError(f"seg_methods: not in the segmentation methods {SEG_METHODS}: {_unknown}")
+    return [m for m in methods if m in SEG_METHODS]
+
+
+def seg_targets(pattern, methods=None, sample_ids=None, **wildcards):
+    """pattern expanded over (method, sample) pairs of each method's own samples, optionally within sample_ids."""
+    methods = SEG_METHODS if methods is None else methods
+    return [t for m in methods
+            for t in expand(pattern, seg_method=m, **wildcards,
+                            sample_id=[s for s in seg_samples(m) if sample_ids is None or s in sample_ids])]
+
+
+wildcard_constraints:
+    seg_method="|".join(re.escape(m) for m in SEG_METHODS),
 
 # a step switched off (config run:) is not loaded: the steps after it read its existing outputs as
 # plain input files (never re-run, missing input error if absent). Background subtraction is always

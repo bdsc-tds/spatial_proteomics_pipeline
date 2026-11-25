@@ -16,6 +16,9 @@
 xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
 insitupy_dir = OUT + "/xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/"
 
+# segmentation methods matched to the Xenium cells: not the xenium_{seg} methods, which are 10x cells already
+ALIGN_SEG_METHODS = [m for m in SEG_METHODS if not m.startswith("xenium_")]
+
 # local refinement after the affine (run, grid, work_max_px, max_shift_um); when run, the cell matching uses it
 REFINE = config["xenium_alignment"]["insitupy"]["refine"]
 
@@ -179,13 +182,13 @@ SUMMARY_XENIUM_SEGS = [config["xenium_alignment"]["xenium_segmentation"], "prose
 rule plot_alignment_summary:
     input:
         script=f"{workflow.basedir}/scripts/_xenium_alignment/plot_alignment_summary.py",
-        counts=expand(rules.plot_alignment.output.counts_table, max_width=ALIGN_MAX_WIDTHS, seg_method=SEG_METHODS,
+        counts=expand(rules.plot_alignment.output.counts_table, max_width=ALIGN_MAX_WIDTHS, seg_method=ALIGN_SEG_METHODS,
                       sample_id=XENIUM_SAMPLE_IDS, allow_missing=True),
     output:
         table=xenium_alignment_summary_dir + "fraction_matched.csv",
         # one per Xenium segmentation / proteomics segmentation, file names set in the script
         barplots=expand(xenium_alignment_summary_dir + "figures/fraction_matched_per_sample_{xenium_seg}_{seg_method}.png",
-                        xenium_seg=SUMMARY_XENIUM_SEGS, seg_method=SEG_METHODS, allow_missing=True),
+                        xenium_seg=SUMMARY_XENIUM_SEGS, seg_method=ALIGN_SEG_METHODS, allow_missing=True),
         # one per Xenium segmentation, the proteomics segmentations side by side at summary_max_width
         barplots_seg_methods=expand(xenium_alignment_summary_dir + "figures/fraction_matched_per_seg_method_{xenium_seg}.png",
                                     xenium_seg=SUMMARY_XENIUM_SEGS, allow_missing=True),
@@ -229,7 +232,7 @@ rule xenium_alignment_all:
         expand(xenium_alignment_dir + "affine_matrix.csv", align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
                sample_id=XENIUM_SAMPLE_IDS),
         expand(rules.plot_alignment.output, align_method=ALIGN_METHODS, max_width=ALIGN_MAX_WIDTHS,
-               seg_method=SEG_METHODS, sample_id=XENIUM_SAMPLE_IDS),
+               seg_method=ALIGN_SEG_METHODS, sample_id=XENIUM_SAMPLE_IDS),
         expand(rules.plot_alignment_summary.output, align_method=ALIGN_METHODS),
         expand(rules.refine_alignment_insitupy.output, max_width=ALIGN_MAX_WIDTHS,
                sample_id=XENIUM_SAMPLE_IDS) if REFINE["run"] else [],

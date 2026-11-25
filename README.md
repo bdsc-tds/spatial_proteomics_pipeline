@@ -77,7 +77,18 @@ path in it is read relative to `config.yml` (see [config/README.md](config/READM
 
 `output_path`, the container, the `run:` switches and method settings (segmentation / alignment
 methods, model folders, Cellpose models and diameters, matching distance, GPU partitions). Only the
-segmentation methods listed in `segmentation: methods` need a settings block.
+segmentation methods listed in `segmentation: methods` need a settings block. Each step after segmentation runs
+on every segmentation method unless its block has a `seg_methods:` list (`cell_type_annotation: tacit:`,
+`cell_type_annotation: virtues:`, `dimensionality_reduction: kronos2:` / `virtues:`).
+
+Xenium segmentations can be added as segmentation methods `xenium_{seg}` (e.g. `xenium_10x_5um`), for samples
+with a Xenium run. The 10x cells are warped onto the proteomics image grid outside the pipeline; the pipeline
+imports them (`import_xenium_mask`, which checks the size and labels) and quantifies, labels and embeds them
+like any other mask. Add `xenium` to `segmentation: methods` and fill `segmentation: xenium:`:
+`segmentations` (Xenium segmentation folder names), `mask_dir` (folder of the warped
+`{cell,nuclei,cytoplasm}_boundaries_mask.tif` and `cell_ids.csv` (`label, cell_id`) per sample, with
+`{segmentation}` and `{sample_id}`) and `samples` (sample ids or names; empty = every sample with a Xenium
+run). These methods are left out of the Xenium alignment plots (they are 10x cells already).
 
 ### experiments.yml
 
@@ -151,11 +162,11 @@ The GPU rules (Mesmer, Cellpose, VirTues, KRONOS2) run on the partitions set und
 |---|---|---|
 | `image_preparation` | `prepare_dapi`, `prepare_segmentation_input` | Writes the channel table, a DAPI image for alignment and a two-channel (nuclear, membrane) segmentation input from the raw image. |
 | `background_subtraction` | `background_subtraction` | COMET only: subtracts the autofluorescence channels with [backsub](https://pypi.org/project/backsub/), and all later steps read the subtracted image. |
-| `segmentation` | `segmentation_{method}`, `quantify_cells_{method}`, `mask_to_geojson_{method}` | Segments cells with each method in `segmentation: methods` (Mesmer, Cellpose 3, VirTues) and writes masks, per-cell mean intensities of every channel and GeoJSON outlines. |
+| `segmentation` | `segmentation_{method}` / `import_xenium_mask`, `quantify_cells`, `mask_to_geojson_{method}` | Segments cells with each method in `segmentation: methods` (Mesmer, Cellpose 3, VirTues; Xenium segmentations imported as `xenium_{seg}`) and writes masks, per-cell mean intensities of every channel and GeoJSON outlines. |
 | `xenium_alignment` | `align_to_xenium_insitupy`, `refine_alignment_insitupy`, `plot_alignment` | Registers the proteomics DAPI onto the Xenium DAPI with [insitupy](https://github.com/SpatialPathology/InSituPy) (affine), optionally refines it locally (one residual shift per tile, thin-plate spline between them; `xenium_alignment: insitupy: refine`) and matches cells to Xenium cells (samples with a Xenium run only). |
-| `cell_type_annotation` | `tacit_{seg_method}`, `tacit_xenium` | Assigns cell types with TACIT (`signatures/{panel}.csv`) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
-| `cell_type_annotation` | `virtues_cell_types_{seg_method}`, `virtues_cell_types_xenium` | Assigns VirTues cell types (majority class of each cell's pixels in the VirTues segmentation head's cell type logits, None suppressed) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
-| `dimensionality_reduction` | `{dr_method}_embeddings_{seg_method}`, `xenium_cell_mask`, `{dr_method}_embeddings_xenium` | Computes per-cell embeddings with VirTues and/or KRONOS2 for every segmentation method's cells, and for 10x's own cells on Xenium samples. |
+| `cell_type_annotation` | `tacit`, `plot_tacit_{seg_method}`, `tacit_xenium` | Assigns cell types with TACIT (`signatures/{panel}.csv`) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
+| `cell_type_annotation` | `virtues_cell_types`, `virtues_cell_types_xenium` | Assigns VirTues cell types (majority class of each cell's pixels in the VirTues segmentation head's cell type logits, None suppressed) to every segmentation method's cells, and to 10x's own cells for Xenium samples. |
+| `dimensionality_reduction` | `{dr_method}_embeddings`, `xenium_cell_mask`, `{dr_method}_embeddings_xenium` | Computes per-cell embeddings with VirTues and/or KRONOS2 for every segmentation method's cells, and for 10x's own cells on Xenium samples. |
 
 **VirTues** ([bunnelab/virtues](https://github.com/bunnelab/virtues)) needs an A100 GPU and a
 `virtues/{panel}.csv` next to the dataset config mapping each channel to its protein (`channel_name,
@@ -182,11 +193,11 @@ subtraction is the exception: its switch also chooses the image every step reads
   `update-experiments` and fill in the new panel's `_` keys. qptiff and OME-TIFF are read by
   `workflow/scripts/utils/readwrite.py`; another format only needs support there.
 - **New segmentation method:** add `workflow/rules/_segmentation/<method>.smk` with a
-  `segmentation_<method>` rule writing `cell_`, `nuclei_` and `cytoplasm_boundaries_mask.tif` (tiled,
-  compressed, all labelled with the cell id, see `scripts/_segmentation/label_masks.py`) to
-  `segmentation/<method>/{sample_id}/`, add `quantify_cells_<method>` and `mask_to_geojson_<method>`
-  to `_segmentation/quantify_cells.smk` (`use rule quantify_cells_mesmer as quantify_cells_<method>
-  with:`, changing the paths), and list the method in `segmentation: methods`.
+  `segmentation_<method>` rule writing `cell_`, `nuclei_` and `cytoplasm_boundaries_mask.tif` (int32, tiled,
+  compressed, all labelled with the cell id, see `scripts/_segmentation/label_masks.py`) on the grid of the
+  image to `segmentation/<method>/{sample_id}/`, and list the method in `segmentation: methods`.
+  Quantification, GeoJSON, cell types and embeddings pick it up (rules on `{seg_method}`). A method with whole
+  cells only gets `"compartments": ["cell"]` in `SEG_METHOD_INFO` (`workflow/Snakefile`), as VirTues does.
 - **New dataset:** copy `config/example/` to a folder of your own and adapt `output_path`,
   `_base_path`, the panel tables and the switches (see [config/README.md](config/README.md)).
 

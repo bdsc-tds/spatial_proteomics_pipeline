@@ -1,12 +1,13 @@
 ### --- Segmentation: masks per method, per-cell quantification, GeoJSON ---
-# one rule file per method, included only if listed in config segmentation: methods (SEG_METHODS: Snakefile)
+# one rule file per entry of config segmentation: methods (SEG_FILES: Snakefile); the xenium file imports the
+# masks of every xenium_{seg} method (SEG_METHODS: Snakefile)
 
 # variables defined in other .smk files:
-# SEG_METHODS: defined in Snakefile
+# SEG_FILES: defined in Snakefile
 
 # --- Rules ---
-for _seg_method in SEG_METHODS:
-    include: f"_segmentation/{_seg_method}.smk"
+for _seg_file in SEG_FILES:
+    include: f"_segmentation/{_seg_file}.smk"
 include: "_segmentation/quantify_cells.smk"
 
 # --- Map run switches to rules ---
