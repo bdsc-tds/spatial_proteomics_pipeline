@@ -5,8 +5,10 @@ the max projection of the panel's nuclear / membrane channels. Cellpose runs twi
 stitched by SPACEc for large images: the nuclear model on the nuclear signal alone, and the
 whole-cell model on membrane + nuclear (SPACEc's own nucleus/cytoplasm mode would run the whole-cell
 model on the nuclei as well). Cellpose works in pixels: the expected diameters are given in µm and
-converted with the image's pixel size. A fixed diameter also stops Cellpose from estimating it again
-on every tile.
+converted with the image's pixel size. Either diameter can instead be "auto": it is then estimated once
+per sample with Cellpose's size models on a few tissue-rich crops (cellpose_diameter.py), and SPACEc gets
+that fixed value, which also stops Cellpose from estimating it again on every tile. The diameters used are
+written to a JSON file.
 Only the three label masks are kept, all labelled with the cell id (the nucleus and cytoplasm of a
 cell carry that cell's label); per-cell features are computed by quantify_cells on all channels.
 SPACEc's own feature tables are written to a temporary folder and discarded.
@@ -14,6 +16,7 @@ SPACEc's own feature tables are written to a temporary folder and discarded.
 
 import argparse
 import gc
+import json
 import os
 import sys
 import tempfile
@@ -23,6 +26,7 @@ import numpy as np
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(script_dir, "../utils/"))
+from cellpose_diameter import AUTO, auto_diameters, parse_diameter
 from label_masks import save_label_masks
 from readwrite import SEGMENTATION_MEMBRANE, SEGMENTATION_NUCLEAR, MultiplexImage
 
@@ -35,11 +39,16 @@ def parse_args():
     parser.add_argument("--model_dir", required=True, help="folder holding (or receiving) the downloaded Cellpose models")
     parser.add_argument("--model", required=True, help="whole-cell Cellpose model, run on membrane + nuclear (e.g. cyto3)")
     parser.add_argument("--nuclear_model", required=True, help="nuclear Cellpose model, run on the nuclear signal (e.g. nuclei)")
-    parser.add_argument("--diameter_um", required=True, type=float, help="expected cell diameter (µm)")
-    parser.add_argument("--nuclear_diameter_um", required=True, type=float, help="expected nucleus diameter (µm)")
+    parser.add_argument("--diameter_um", required=True, type=parse_diameter, help=f"expected cell diameter (µm), or {AUTO!r} to estimate it")
+    parser.add_argument("--nuclear_diameter_um", required=True, type=parse_diameter, help=f"expected nucleus diameter (µm), or {AUTO!r} to estimate it")
+    parser.add_argument("--auto_diameter_range_um", type=float, nargs=2, default=[5, 25], metavar=("MIN", "MAX"),
+                        help="estimated cell diameters are clamped to this range (µm)")
+    parser.add_argument("--auto_nuclear_diameter_range_um", type=float, nargs=2, default=[4, 15], metavar=("MIN", "MAX"),
+                        help="estimated nucleus diameters are clamped to this range (µm)")
     parser.add_argument("--out_cells", required=True)
     parser.add_argument("--out_nuclei", required=True)
     parser.add_argument("--out_cytoplasm", required=True)
+    parser.add_argument("--out_diameters", required=True, help="JSON with the cell and nucleus diameters used")
     return parser.parse_args()
 
 
@@ -94,6 +103,32 @@ def run_cellpose(sp, image, channel_file, out_dir, model, diameter_px, membrane_
     return mask
 
 
+def resolve_diameters(args, pixel_size, use_gpu):
+    """Cell and nucleus diameters (µm) with their source: the config value, or the per-sample estimate."""
+    estimate_cells, estimate_nuclei = args.diameter_um == AUTO, args.nuclear_diameter_um == AUTO
+    fixed = lambda value: {"source": "config", "diameter_um": value}
+    diameters = {"cells": None if estimate_cells else fixed(args.diameter_um),
+                 "nuclei": None if estimate_nuclei else fixed(args.nuclear_diameter_um)}
+    if not (estimate_cells or estimate_nuclei):
+        return diameters
+
+    # both planes of the segmentation input, freed again before SPACEc reads the image
+    with MultiplexImage(args.image) as img:
+        nuclear = img.read_channel(SEGMENTATION_NUCLEAR)
+        membrane = img.read_channel(SEGMENTATION_MEMBRANE)
+    estimate = auto_diameters(nuclear, membrane, pixel_size, args.model, args.nuclear_model, estimate_cells,
+                              estimate_nuclei, args.auto_diameter_range_um, args.auto_nuclear_diameter_range_um, use_gpu)
+    del nuclear, membrane
+    gc.collect()
+
+    # estimated diameters, with the crops they come from
+    for key in ("cells", "nuclei"):
+        if estimate[key] is not None:
+            diameters[key] = {"source": "estimated", **estimate[key]}
+    diameters["estimate_crops"] = {"crop_px": estimate["crop_px"], "top_left": estimate["crops"]}
+    return diameters
+
+
 def main():
     args = parse_args()
 
@@ -126,10 +161,16 @@ def main():
     if pixel_size is None:
         sys.exit(f"{args.image} carries no pixel size; Cellpose needs it to convert the diameters to pixels")
 
+    # diameters in µm: from the config, or estimated on this sample
+    diameters = resolve_diameters(args, pixel_size, use_gpu)
+    diameter_um, nuclear_diameter_um = diameters["cells"]["diameter_um"], diameters["nuclei"]["diameter_um"]
+
     # expected diameters in pixels
-    diameter_px = args.diameter_um / pixel_size
-    nuclear_diameter_px = args.nuclear_diameter_um / pixel_size
-    print(f"diameters: cells {args.diameter_um} µm = {diameter_px:.1f} px, nuclei {args.nuclear_diameter_um} µm = {nuclear_diameter_px:.1f} px")
+    diameter_px = diameter_um / pixel_size
+    nuclear_diameter_px = nuclear_diameter_um / pixel_size
+    print(f"diameters: cells {diameter_um:.2f} µm = {diameter_px:.1f} px, nuclei {nuclear_diameter_um:.2f} µm = {nuclear_diameter_px:.1f} px")
+    with open(args.out_diameters, "w") as f:
+        json.dump({**diameters, "pixel_size_um": pixel_size}, f, indent=2)
 
     # SPACEc writes feature tables next to its output: keep them in a temporary folder
     out_dir = os.path.dirname(os.path.abspath(args.out_cells))

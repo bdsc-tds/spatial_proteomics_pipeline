@@ -42,9 +42,12 @@ segmentation:
     model_dir: resources/models/cellpose
     model: cyto3          # whole-cell model, run on membrane + nuclear
     nuclear_model: nuclei # nuclear model, run on the nuclear signal
-    # expected diameters, converted to pixels with the image's pixel size (starting values, tune)
-    diameter_um: 10
-    nuclear_diameter_um: 6
+    # expected diameters (µm, converted to pixels with the image's pixel size), or auto: estimated once per sample
+    # with Cellpose's size models on tissue-rich crops and clamped to the ranges below (values used: diameters.json)
+    diameter_um: auto           # e.g. 10
+    nuclear_diameter_um: auto   # e.g. 6
+    auto_diameter_range_um: [5, 25]
+    auto_nuclear_diameter_range_um: [4, 15]
   virtues:
     # channel -> protein per panel: virtues/{panel}.csv next to this file (channel_name, uniprot_id; blank = not used)
     # VirTues weights (Hugging Face bunnelab/virtues) and ESM-2, downloaded there on first use

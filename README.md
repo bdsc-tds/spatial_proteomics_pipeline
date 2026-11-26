@@ -31,6 +31,7 @@ processed/
   image_preparation/{sample_id}/                    channels.csv, dapi.ome.tif, segmentation_input.ome.tif, logs/
   background_subtraction/{sample_id}/               image.ome.tiff, markers.csv, markerout.csv, logs/
   segmentation/{seg_method}/{sample_id}/            *_boundaries_mask.tif, feature_table.csv, *_boundaries.geojson, logs/  (mesmer, cellpose, virtues)
+  segmentation/cellpose/{sample_id}/                + diameters.json (cell and nucleus diameters used, estimated or from the config)
   segmentation/virtues/{sample_id}/                 + image_1um.npy, channel_stats.csv (cell mask only, no nuclei / cytoplasm)
   segmentation/virtues/panels/{panel}/              marker_embeddings.pt, standardization.csv
   xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/  affine_matrix.csv, local_refinement/control_points.csv, {seg_method}_cell_matches.csv, figures/, logs/
@@ -80,6 +81,12 @@ methods, model folders, Cellpose models and diameters, matching distance, GPU pa
 segmentation methods listed in `segmentation: methods` need a settings block. Each step after segmentation runs
 on every segmentation method unless its block has a `seg_methods:` list (`cell_type_annotation: tacit:`,
 `cell_type_annotation: virtues:`, `dimensionality_reduction: kronos2:` / `virtues:`).
+
+Cellpose's `diameter_um` / `nuclear_diameter_um` take a number (µm) or `auto`. With `auto` the diameter is
+estimated once per sample by Cellpose's size models (cyto3 and nuclei) on the 8 crops of 500 µm with the most nuclear
+signal; the median over the crops, clamped to `auto_diameter_range_um` / `auto_nuclear_diameter_range_um`, is
+passed to SPACEc as a fixed diameter for the whole image. The values used are written to
+`segmentation/cellpose/{sample_id}/diameters.json`.
 
 Xenium segmentations can be added as segmentation methods `xenium_{seg}` (e.g. `xenium_10x_5um`), for samples
 with a Xenium run. The 10x cells are warped onto the proteomics image grid outside the pipeline; the pipeline

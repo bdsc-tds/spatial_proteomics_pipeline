@@ -1,4 +1,5 @@
 # Cellpose 3 (via SPACEc) masks: nuclear model on the nuclear signal, cell model on membrane + nuclear.
+# Diameters from the config, or estimated per sample ("auto", Cellpose size models); the values used go to diameters.json.
 # Quantified in quantify_cells.smk
 
 # variables defined in other .smk files:
@@ -17,16 +18,20 @@ rule segmentation_cellpose:
         cells=cellpose_dir + "cell_boundaries_mask.tif",
         nuclei=cellpose_dir + "nuclei_boundaries_mask.tif",
         cytoplasm=cellpose_dir + "cytoplasm_boundaries_mask.tif",
+        diameters=cellpose_dir + "diameters.json",
     params:
         model_dir=config["segmentation"]["cellpose"]["model_dir"],
         model=config["segmentation"]["cellpose"]["model"],
         nuclear_model=config["segmentation"]["cellpose"]["nuclear_model"],
         diameter_um=config["segmentation"]["cellpose"]["diameter_um"],
         nuclear_diameter_um=config["segmentation"]["cellpose"]["nuclear_diameter_um"],
+        # clamping range of the estimated diameters (diameter "auto")
+        auto_range_um=shell_list(config["segmentation"]["cellpose"].get("auto_diameter_range_um", [5, 25])),
+        auto_nuclear_range_um=shell_list(config["segmentation"]["cellpose"].get("auto_nuclear_diameter_range_um", [4, 15])),
     threads: 1
     resources:
-        # both input planes, SPACEc's copies and the masks in memory
-        runtime=180,
+        # both input planes, SPACEc's copies and the masks in memory; a few more minutes for the diameter estimate
+        runtime=200,
         mem='100G',
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
@@ -43,8 +48,11 @@ rule segmentation_cellpose:
         --nuclear_model {params.nuclear_model} \
         --diameter_um {params.diameter_um} \
         --nuclear_diameter_um {params.nuclear_diameter_um} \
+        --auto_diameter_range_um {params.auto_range_um} \
+        --auto_nuclear_diameter_range_um {params.auto_nuclear_range_um} \
         --out_cells {output.cells} \
         --out_nuclei {output.nuclei} \
         --out_cytoplasm {output.cytoplasm} \
+        --out_diameters {output.diameters} \
         &> {log}
         """
