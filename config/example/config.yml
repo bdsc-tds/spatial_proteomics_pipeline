@@ -31,8 +31,9 @@ segmentation:
   # cells are warped onto the proteomics image grid outside the pipeline; add xenium to methods to import them
   xenium:
     segmentations: [10x_5um]  # Xenium segmentation folder names -> methods xenium_10x_5um, ...
-    # folder of the warped masks per sample: {cell,nuclei,cytoplasm}_boundaries_mask.tif (int32, image grid) + cell_ids.csv (label, cell_id)
-    mask_dir: /path/to/warped_masks/{segmentation}/{sample_id}
+    # warped masks of each sample, {name} = {cell,nuclei,cytoplasm}_boundaries_mask.tif (int32, image grid) and cell_ids.csv
+    # (label, cell_id); also {segmentation}, {sample_id} or {sample} (last level of the id)
+    mask_file: /path/to/warped_masks/{segmentation}/{sample_id}/{name}
     samples: []  # sample ids or names (last level of the id); empty = every sample with a Xenium run
   mesmer:
     # Mesmer model, downloaded there on first use (MultiplexSegmentation from deepcell)

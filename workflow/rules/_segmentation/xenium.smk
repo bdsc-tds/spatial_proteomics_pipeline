@@ -9,16 +9,17 @@
 # XENIUM_SEG_CONFIG: defined in Snakefile
 # XENIUM_SEG_NAMES:  defined in Snakefile
 
-if XENIUM_SEG_NAMES and not XENIUM_SEG_CONFIG.get("mask_dir"):
-    raise WorkflowError("segmentation: xenium: mask_dir is needed (folder of the warped masks, with {segmentation} "
-                        "and {sample_id})")
+if XENIUM_SEG_NAMES and not XENIUM_SEG_CONFIG.get("mask_file"):
+    raise WorkflowError("segmentation: xenium: mask_file is needed (path template of the warped masks, with {name} "
+                        "and {segmentation}, {sample_id} or {sample})")
 
 
 def xenium_mask_file(name):
-    """Input function: file name of the external warp output of one sample and Xenium segmentation."""
+    """Input function: file of the external warp output of one sample and Xenium segmentation; mask_file template
+    with {name} (file name), {segmentation}, {sample_id} and {sample} (last level of the sample id)."""
     def _file(wc):
-        return os.path.join(XENIUM_SEG_CONFIG["mask_dir"].format(segmentation=wc.xenium_seg, sample_id=wc.sample_id),
-                            name)
+        return XENIUM_SEG_CONFIG["mask_file"].format(name=name, segmentation=wc.xenium_seg, sample_id=wc.sample_id,
+                                                     sample=wc.sample_id.split("/")[-1])
     return _file
 
 

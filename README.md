@@ -92,9 +92,9 @@ Xenium segmentations can be added as segmentation methods `xenium_{seg}` (e.g. `
 with a Xenium run. The 10x cells are warped onto the proteomics image grid outside the pipeline; the pipeline
 imports them (`import_xenium_mask`, which checks the size and labels) and quantifies, labels and embeds them
 like any other mask. Add `xenium` to `segmentation: methods` and fill `segmentation: xenium:`:
-`segmentations` (Xenium segmentation folder names), `mask_dir` (folder of the warped
-`{cell,nuclei,cytoplasm}_boundaries_mask.tif` and `cell_ids.csv` (`label, cell_id`) per sample, with
-`{segmentation}` and `{sample_id}`) and `samples` (sample ids or names; empty = every sample with a Xenium
+`segmentations` (Xenium segmentation folder names), `mask_file` (path template of the warped
+`{cell,nuclei,cytoplasm}_boundaries_mask.tif` and `cell_ids.csv` (`label, cell_id`) of each sample, with `{name}`
+for these file names and `{segmentation}`, `{sample_id}` or `{sample}` (last level of the id)) and `samples` (sample ids or names; empty = every sample with a Xenium
 run). These methods are left out of the Xenium alignment plots (they are 10x cells already).
 
 ### experiments.yml
