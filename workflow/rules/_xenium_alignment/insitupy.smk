@@ -56,9 +56,10 @@ rule align_to_xenium_insitupy:
         xenium_dir=xenium_dir,
         min_good_matches=config["xenium_alignment"]["insitupy"]["min_good_matches_per_area"],
     resources:
-        # codex: SIFT on the full-size image (~23k² px) runs out of memory at 50G
+        # codex: SIFT on the full-size image (~23k² px) runs out of memory at 50G. Resampling the proteomics DAPI
+        # onto the full Xenium grid needs ~100G whatever max_width (a COMET slide ran out of memory at 40G with 8000)
         runtime=lambda wildcards: 45 if wildcards.max_width == 'codex' else 30,
-        mem=lambda wildcards: {'codex': '160G', '16000': '100G'}.get(wildcards.max_width, '40G')
+        mem=lambda wildcards: '160G' if wildcards.max_width == 'codex' else '100G'
     log:
         insitupy_dir + "logs/align_to_xenium_insitupy.log"
     container:
