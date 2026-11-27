@@ -9,7 +9,8 @@
 # SAMPLE_IDS:             defined in Snakefile
 # source_image:           defined in Snakefile
 # xenium_qc_mask:         defined in Snakefile
-# OUT:                    defined in Snakefile
+# results:                defined in Snakefile
+# script:                 defined in Snakefile
 # GPU_PARTITION:          defined in Snakefile
 # GPU_EXTRA:              defined in Snakefile
 # XENIUM_CT_SEG:          defined in Snakefile
@@ -37,16 +38,16 @@ KRONOS2_SEG_METHODS = step_seg_methods(KRONOS2)
 # embedding of every cell of one sample's mask (cell_id, 768-d embedding)
 rule kronos2_embeddings:
     input:
-        script=f"{workflow.basedir}/scripts/_dimensionality_reduction/kronos2_embeddings.py",
+        script=script("_dimensionality_reduction/kronos2_embeddings.py"),
         markers=lambda wc: kronos2_markers(SAMPLES[wc.sample_id]["panel"]),
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
         # from the method's segmentation rule
-        mask=OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif",
+        mask=results("segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif"),
         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
         qc_mask=xenium_qc_mask,
     output:
-        embeddings=OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5",
+        embeddings=results("dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5"),
     params:
         model_dir=KRONOS2["model_dir"],
         box_size=KRONOS2["box_size"],
@@ -60,7 +61,7 @@ rule kronos2_embeddings:
         partition=GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
-        OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/logs/kronos2_embeddings.log"
+        results("dimensionality_reduction/kronos2/{seg_method}/{sample_id}/logs/kronos2_embeddings.log")
     container:
         config["containers"]["pixi"]
     shell:
@@ -79,30 +80,30 @@ rule kronos2_embeddings:
 
 use rule kronos2_embeddings as kronos2_embeddings_xenium with:
     input:
-        script=f"{workflow.basedir}/scripts/_dimensionality_reduction/kronos2_embeddings.py",
+        script=script("_dimensionality_reduction/kronos2_embeddings.py"),
         markers=lambda wc: kronos2_markers(SAMPLES[wc.sample_id]["panel"]),
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
         # from xenium_cell_mask: 10x cells of the XENIUM_CT_SEG segmentation and their cell_ids
-        mask=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif",
-        cell_ids=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv",
+        mask=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif"),
+        cell_ids=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv"),
         # Xenium only: saturation QC masks of the Xenium run (xenium_qc_mask)
         qc_mask=xenium_qc_mask,
     output:
-        embeddings=OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
+        embeddings=results("dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5"),
     params:
         model_dir=KRONOS2["model_dir"],
         box_size=KRONOS2["box_size"],
         cell_ids=lambda wc, input: input.cell_ids,  # cell_id = 10x cell_id
         qc_mask=lambda wc: f"--qc_mask {xenium_qc_mask(wc)}" if xenium_qc_mask(wc) else "",
     log:
-        OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/kronos2_embeddings.log"
+        results("dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/kronos2_embeddings.log")
 
 # KRONOS2 embeddings of every method in KRONOS2_SEG_METHODS (on its own samples), and of the Xenium cells
 # (samples imaged on Xenium)
 rule kronos2_embeddings_all:
     input:
-        seg_targets(OUT + "/dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5",
+        seg_targets(results("dimensionality_reduction/kronos2/{seg_method}/{sample_id}/cell_embeddings.h5"),
                     methods=KRONOS2_SEG_METHODS),
-        expand(OUT + "/dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
+        expand(results("dimensionality_reduction/kronos2/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5"),
                sample_id=XENIUM_MASK_SAMPLE_IDS),

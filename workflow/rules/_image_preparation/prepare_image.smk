@@ -2,18 +2,19 @@
 # Two rules so that changing the segmentation markers does not re-run the DAPI (and the Xenium alignment)
 
 # variables defined in other .smk files:
-# OUT:          defined in Snakefile
+# results:      defined in Snakefile
+# script:       defined in Snakefile
 # source_image: defined in Snakefile
 # shell_list:   defined in Snakefile
 # panel_meta:   defined in Snakefile
 # SAMPLE_IDS:   defined in Snakefile
 
-image_preparation_dir = OUT + "/image_preparation/{sample_id}/"
+image_preparation_dir = results("image_preparation/{sample_id}/")
 
 # channel table + first nuclear channel alone, for the alignment to Xenium
 rule prepare_dapi:
     input:
-        script=f"{workflow.basedir}/scripts/_image_preparation/prepare_dapi.py",
+        script=script("_image_preparation/prepare_dapi.py"),
         image=source_image,
     output:
         channels=image_preparation_dir + "channels.csv",
@@ -47,7 +48,7 @@ rule prepare_dapi:
 # nuclear and membrane max projections, input of the segmentation methods
 rule prepare_segmentation_input:
     input:
-        script=f"{workflow.basedir}/scripts/_image_preparation/prepare_segmentation_input.py",
+        script=script("_image_preparation/prepare_segmentation_input.py"),
         image=source_image,
     output:
         # deleted once all segmentation jobs have read it

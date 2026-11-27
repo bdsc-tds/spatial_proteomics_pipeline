@@ -1,18 +1,19 @@
 # Subtract the autofluorescence background channels from the raw image with backsub (COMET)
 
 # variables defined in other .smk files:
-# OUT:                        defined in Snakefile
+# results:                    defined in Snakefile
+# script:                     defined in Snakefile
 # CONFIG_PATH:                defined in Snakefile
 # SAMPLES:                    defined in Snakefile
 # BACKSUB_IMAGE:              defined in Snakefile
 # SAMPLE_IDS:                 defined in Snakefile
 # use_background_subtraction: defined in Snakefile
 
-background_subtraction_dir = OUT + "/background_subtraction/{sample_id}/"
+background_subtraction_dir = results("background_subtraction/{sample_id}/")
 
 rule background_subtraction:
     input:
-        script=f"{workflow.basedir}/scripts/_background_subtraction/run_backsub.py",
+        script=script("_background_subtraction/run_backsub.py"),
         image=lambda wc: SAMPLES[wc.sample_id]["image"],
         # raw -> clean channel names of the panel: channel_names/{panel}.csv next to the dataset config
         channel_names=lambda wc: os.path.join(os.path.dirname(CONFIG_PATH), "channel_names",

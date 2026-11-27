@@ -5,7 +5,8 @@
 # os:                    imported in Snakefile
 # np:                    imported in Snakefile
 # re:                    imported in Snakefile
-# OUT:                   defined in Snakefile
+# results:               defined in Snakefile
+# script:                defined in Snakefile
 # CONFIG_PATH:           defined in Snakefile
 # SAMPLES:               defined in Snakefile
 # SAMPLE_IDS:            defined in Snakefile
@@ -15,8 +16,8 @@
 # GPU_EXTRA:             defined in Snakefile
 
 VIRTUES = config["segmentation"]["virtues"]
-virtues_dir = OUT + "/segmentation/virtues/{sample_id}/"
-virtues_panel_dir = OUT + "/segmentation/virtues/panels/{panel}/"
+virtues_dir = results("segmentation/virtues/{sample_id}/")
+virtues_panel_dir = results("segmentation/virtues/panels/{panel}/")
 
 
 def virtues_markers(panel):
@@ -36,7 +37,7 @@ wildcard_constraints:
 # ESM-2 embedding of every protein of the panel (sequences from UniProt)
 rule virtues_marker_embeddings:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/virtues_marker_embeddings.py",
+        script=script("_segmentation/virtues_marker_embeddings.py"),
         markers=lambda wc: virtues_markers(wc.panel),
     output:
         embeddings=virtues_panel_dir + "marker_embeddings.pt",
@@ -63,7 +64,7 @@ rule virtues_marker_embeddings:
 # mapped channels at VirTues' resolution, clipped and log1p-transformed; per-channel sums for the panel's mean / std
 rule virtues_prepare_image:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/virtues_prepare_image.py",
+        script=script("_segmentation/virtues_prepare_image.py"),
         # raw or background-subtracted image (source_image, Snakefile)
         image=source_image,
         markers=lambda wc: virtues_markers(SAMPLES[wc.sample_id]["panel"]),
@@ -102,9 +103,9 @@ rule virtues_prepare_image:
 # mean and std of every channel over the tissue of all samples of the panel (spora's global statistics)
 rule virtues_standardization_stats:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/virtues_standardization_stats.py",
+        script=script("_segmentation/virtues_standardization_stats.py"),
         # from virtues_prepare_image
-        stats=lambda wc: expand(OUT + "/segmentation/virtues/{sample_id}/channel_stats.csv",
+        stats=lambda wc: expand(results("segmentation/virtues/{sample_id}/channel_stats.csv"),
                                 sample_id=[s for s in SAMPLE_IDS if SAMPLES[s]["panel"] == wc.panel]),
     output:
         stats=virtues_panel_dir + "standardization.csv",
@@ -127,13 +128,13 @@ rule virtues_standardization_stats:
 # VirTues + segmentation head: whole-cell mask on the image's pixel grid, and the head's cell type logits at 1 µm
 rule segmentation_virtues:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/virtues_segmentation.py",
+        script=script("_segmentation/virtues_segmentation.py"),
         # from virtues_prepare_image
         image_1um=virtues_dir + "image_1um.npy",
         channel_stats=virtues_dir + "channel_stats.csv",
         # from virtues_standardization_stats and virtues_marker_embeddings (the sample's panel)
-        standardization=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv",
-        embeddings=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt",
+        standardization=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv"),
+        embeddings=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt"),
         # raw or background-subtracted image (source_image, Snakefile): its size only
         image=source_image,
     output:

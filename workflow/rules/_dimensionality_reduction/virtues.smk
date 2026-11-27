@@ -7,7 +7,8 @@
 # SEG_METHODS:            defined in Snakefile
 # step_seg_methods:       defined in Snakefile
 # seg_targets:            defined in Snakefile
-# OUT:                    defined in Snakefile
+# results:                defined in Snakefile
+# script:                 defined in Snakefile
 # SAMPLES:                defined in Snakefile
 # source_image:           defined in Snakefile
 # VIRTUES:                defined in _segmentation/virtues.smk
@@ -27,19 +28,19 @@ VIRTUES_DR_SEG_METHODS = step_seg_methods(config["dimensionality_reduction"].get
 # embedding of every cell of one sample's mask (cell_id, 512-d embedding)
 rule virtues_embeddings:
     input:
-        script=f"{workflow.basedir}/scripts/_dimensionality_reduction/virtues_embeddings.py",
+        script=script("_dimensionality_reduction/virtues_embeddings.py"),
         # from virtues_prepare_image
-        image_1um=OUT + "/segmentation/virtues/{sample_id}/image_1um.npy",
-        channel_stats=OUT + "/segmentation/virtues/{sample_id}/channel_stats.csv",
+        image_1um=results("segmentation/virtues/{sample_id}/image_1um.npy"),
+        channel_stats=results("segmentation/virtues/{sample_id}/channel_stats.csv"),
         # from virtues_standardization_stats and virtues_marker_embeddings (the sample's panel)
-        standardization=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv",
-        embeddings=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt",
+        standardization=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv"),
+        embeddings=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt"),
         # raw or background-subtracted image (source_image, Snakefile): its size only
         image=source_image,
         # from the method's segmentation rule
-        mask=OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif",
+        mask=results("segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif"),
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5",
+        embeddings=results("dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5"),
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
@@ -52,7 +53,7 @@ rule virtues_embeddings:
         partition=VIRTUES_GPU_PARTITION,
         slurm_extra=GPU_EXTRA,
     log:
-        OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/logs/virtues_embeddings.log"
+        results("dimensionality_reduction/virtues/{seg_method}/{sample_id}/logs/virtues_embeddings.log")
     container:
         config["containers"]["pixi"]
     shell:
@@ -74,33 +75,33 @@ rule virtues_embeddings:
 
 use rule virtues_embeddings as virtues_embeddings_xenium with:
     input:
-        script=f"{workflow.basedir}/scripts/_dimensionality_reduction/virtues_embeddings.py",
+        script=script("_dimensionality_reduction/virtues_embeddings.py"),
         # from virtues_prepare_image
-        image_1um=OUT + "/segmentation/virtues/{sample_id}/image_1um.npy",
-        channel_stats=OUT + "/segmentation/virtues/{sample_id}/channel_stats.csv",
+        image_1um=results("segmentation/virtues/{sample_id}/image_1um.npy"),
+        channel_stats=results("segmentation/virtues/{sample_id}/channel_stats.csv"),
         # from virtues_standardization_stats and virtues_marker_embeddings (the sample's panel)
-        standardization=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv",
-        embeddings=lambda wc: OUT + f"/segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt",
+        standardization=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/standardization.csv"),
+        embeddings=lambda wc: results(f"segmentation/virtues/panels/{SAMPLES[wc.sample_id]['panel']}/marker_embeddings.pt"),
         # raw or background-subtracted image (source_image, Snakefile): its size only
         image=source_image,
         # from xenium_cell_mask: 10x cells of the XENIUM_CT_SEG segmentation and their cell_ids
-        mask=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif",
-        cell_ids=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv",
+        mask=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif"),
+        cell_ids=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv"),
     output:
-        embeddings=OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
+        embeddings=results("dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5"),
     params:
         model_dir=VIRTUES["model_dir"],
         model=VIRTUES["model"],
         blur_sigma=VIRTUES["blur_sigma"],
         cell_ids=lambda wc, input: input.cell_ids,  # cell_id = 10x cell_id
     log:
-        OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/virtues_embeddings.log"
+        results("dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/virtues_embeddings.log")
 
 # VirTues embeddings of every method in VIRTUES_DR_SEG_METHODS (on its own samples), and of the Xenium cells
 # (samples imaged on Xenium)
 rule virtues_embeddings_all:
     input:
-        seg_targets(OUT + "/dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5",
+        seg_targets(results("dimensionality_reduction/virtues/{seg_method}/{sample_id}/cell_embeddings.h5"),
                     methods=VIRTUES_DR_SEG_METHODS),
-        expand(OUT + "/dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5",
+        expand(results("dimensionality_reduction/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_embeddings.h5"),
                sample_id=XENIUM_MASK_SAMPLE_IDS),

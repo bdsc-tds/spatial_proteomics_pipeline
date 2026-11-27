@@ -6,7 +6,8 @@
 # SAMPLE_IDS:        defined in Snakefile
 # SAMPLES:           defined in Snakefile
 # xenium_ct_seg_dir: defined in Snakefile
-# OUT:               defined in Snakefile
+# results:           defined in Snakefile
+# script:            defined in Snakefile
 # XENIUM_CT_SEG:     defined in Snakefile
 
 # samples imaged on Xenium (technology xenium) whose run has the XENIUM_CT_SEG segmentation (xenium_ct_seg_dir: Snakefile)
@@ -16,12 +17,12 @@ XENIUM_MASK_SAMPLE_IDS = [s for s in SAMPLE_IDS
 # cell label mask (tiled TIFF) and label -> 10x cell_id table of one sample
 rule xenium_cell_mask:
     input:
-        script=f"{workflow.basedir}/scripts/_dimensionality_reduction/xenium_cell_mask.py",
+        script=script("_dimensionality_reduction/xenium_cell_mask.py"),
         # 10x cell labels and cell table of the XENIUM_CT_SEG segmentation, read with read_xenium_sample
         cells=lambda wc: os.path.join(xenium_ct_seg_dir(wc.sample_id), "cells.zarr.zip"),
     output:
-        mask=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif",
-        cell_ids=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv",
+        mask=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif"),
+        cell_ids=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv"),
     params:
         seg_dir=lambda wc: xenium_ct_seg_dir(wc.sample_id),
     threads: 1
@@ -29,7 +30,7 @@ rule xenium_cell_mask:
         runtime=60,
         mem='48G',
     log:
-        OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/xenium_cell_mask.log"
+        results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/xenium_cell_mask.log")
     container:
         config["containers"]["pixi"]
     shell:

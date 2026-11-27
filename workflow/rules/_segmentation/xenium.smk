@@ -4,7 +4,8 @@
 # Methods and samples: SEG_METHOD_INFO (Snakefile), from config segmentation: xenium
 
 # variables defined in other .smk files:
-# OUT:               defined in Snakefile
+# results:           defined in Snakefile
+# script:            defined in Snakefile
 # source_image:      defined in Snakefile
 # XENIUM_SEG_CONFIG: defined in Snakefile
 # XENIUM_SEG_NAMES:  defined in Snakefile
@@ -23,12 +24,12 @@ def xenium_mask_file(name):
     return _file
 
 
-xenium_seg_dir = OUT + "/segmentation/xenium_{xenium_seg}/{sample_id}/"
+xenium_seg_dir = results("segmentation/xenium_{xenium_seg}/{sample_id}/")
 
 # warped cell / nuclei / cytoplasm masks and their label -> 10x cell_id table, checked against the image
 rule import_xenium_mask:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/import_xenium_mask.py",
+        script=script("_segmentation/import_xenium_mask.py"),
         # external warp of the 10x masks onto the proteomics image grid
         cells=xenium_mask_file("cell_boundaries_mask.tif"),
         nuclei=xenium_mask_file("nuclei_boundaries_mask.tif"),

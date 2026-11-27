@@ -3,7 +3,8 @@
 
 # variables defined in other .smk files:
 # os:                   imported in Snakefile
-# OUT:                  defined in Snakefile
+# results:              defined in Snakefile
+# script:               defined in Snakefile
 # SAMPLES:              defined in Snakefile
 # xenium_segmentations: imported in Snakefile (experiments.py)
 # XENIUM_SAMPLE_IDS:    defined in Snakefile
@@ -13,8 +14,8 @@
 # ALIGN_METHODS:        defined in xenium_alignment.smk
 
 # {max_width}: px size of the shrunk copies used for feature matching, one folder per value
-xenium_alignment_dir = OUT + "/xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/"
-insitupy_dir = OUT + "/xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/"
+xenium_alignment_dir = results("xenium_alignment/{align_method}/max_width_{max_width}/{sample_id}/")
+insitupy_dir = results("xenium_alignment/insitupy/max_width_{max_width}/{sample_id}/")
 
 # segmentation methods matched to the Xenium cells: not the xenium_{seg} methods, which are 10x cells already
 ALIGN_SEG_METHODS = [m for m in SEG_METHODS if not m.startswith("xenium_")]
@@ -39,9 +40,9 @@ XENIUM_SEGS = {
 
 rule align_to_xenium_insitupy:
     input:
-        script=f"{workflow.basedir}/scripts/_xenium_alignment/insitupy_alignment.py",
+        script=script("_xenium_alignment/insitupy_alignment.py"),
         # from prepare_dapi
-        dapi=OUT + "/image_preparation/{sample_id}/dapi.ome.tif",
+        dapi=results("image_preparation/{sample_id}/dapi.ome.tif"),
         xenium=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
     output:
         affine=insitupy_dir + "affine_matrix.csv",
@@ -83,7 +84,7 @@ rule align_to_xenium_insitupy:
 # local refinement: residual shift per tile after the affine (SIFT + RANSAC on both DAPIs), as control points
 rule refine_alignment_insitupy:
     input:
-        script=f"{workflow.basedir}/scripts/_xenium_alignment/local_refinement.py",
+        script=script("_xenium_alignment/local_refinement.py"),
         # from align_to_xenium_insitupy
         registered=insitupy_dir + "dapi_registered.ome.tif",
         xenium=lambda wc: os.path.join(xenium_dir(wc), "experiment.xenium"),
@@ -121,9 +122,9 @@ rule refine_alignment_insitupy:
 # match aligned proteomics cells to Xenium cells; overlay and count plots per segmentation method
 rule plot_alignment:
     input:
-        script=f"{workflow.basedir}/scripts/_xenium_alignment/plot_alignment.py",
+        script=script("_xenium_alignment/plot_alignment.py"),
         # from quantify_cells_{seg_method}
-        feature_table=OUT + "/segmentation/{seg_method}/{sample_id}/feature_table.csv",
+        feature_table=results("segmentation/{seg_method}/{sample_id}/feature_table.csv"),
         affine=xenium_alignment_dir + "affine_matrix.csv",
         # from refine_alignment_insitupy, when refine: run
         control_points=[xenium_alignment_dir + "local_refinement/control_points.csv"] if REFINE["run"] else [],
@@ -176,13 +177,13 @@ rule plot_alignment:
 
 # fraction of Xenium cells matched to a proteomics cell over all samples, segmentation methods and
 # max_width values, for the default Xenium segmentation and Proseg (when the run has one)
-xenium_alignment_summary_dir = OUT + "/xenium_alignment/{align_method}/summary/"
+xenium_alignment_summary_dir = results("xenium_alignment/{align_method}/summary/")
 # default Xenium segmentation (matched in plot_alignment) and Proseg
 SUMMARY_XENIUM_SEGS = [config["xenium_alignment"]["xenium_segmentation"], "proseg"]
 
 rule plot_alignment_summary:
     input:
-        script=f"{workflow.basedir}/scripts/_xenium_alignment/plot_alignment_summary.py",
+        script=script("_xenium_alignment/plot_alignment_summary.py"),
         counts=expand(rules.plot_alignment.output.counts_table, max_width=ALIGN_MAX_WIDTHS, seg_method=ALIGN_SEG_METHODS,
                       sample_id=XENIUM_SAMPLE_IDS, allow_missing=True),
     output:
@@ -195,8 +196,8 @@ rule plot_alignment_summary:
                                     xenium_seg=SUMMARY_XENIUM_SEGS, allow_missing=True),
         boxplot=xenium_alignment_summary_dir + "figures/fraction_matched_per_max_width.png",
     params:
-        root=OUT + "/xenium_alignment",
-        seg_root=OUT + "/segmentation", # feature tables, for the Proseg matching
+        root=results("xenium_alignment"),
+        seg_root=results("segmentation"), # feature tables, for the Proseg matching
         experiments=EXPERIMENTS_PATH, # Xenium run of each sample, for the Proseg folder
         max_dist=config["xenium_alignment"]["max_match_dist_um"],
         xenium_seg=config["xenium_alignment"]["xenium_segmentation"],

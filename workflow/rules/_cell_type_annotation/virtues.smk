@@ -6,7 +6,8 @@
 
 # variables defined in other .smk files:
 # os:                 imported in Snakefile
-# OUT:                defined in Snakefile
+# results:            defined in Snakefile
+# script:             defined in Snakefile
 # step_seg_methods:   defined in Snakefile
 # seg_targets:        defined in Snakefile
 # SAMPLE_IDS:         defined in Snakefile
@@ -28,14 +29,14 @@ VIRTUES_CT_SEG_METHODS = step_seg_methods(config["cell_type_annotation"].get("vi
 # cell type of every cell of one sample (cell_id, cell_type, confidence, pixel fraction of every class)
 rule virtues_cell_types:
     input:
-        script=f"{workflow.basedir}/scripts/_cell_type_annotation/virtues_cell_types.py",
+        script=script("_cell_type_annotation/virtues_cell_types.py"),
         # from segmentation_virtues (logits and class names)
-        logits=OUT + "/segmentation/virtues/{sample_id}/class_logits.tif",
-        classes=OUT + "/segmentation/virtues/{sample_id}/classes.csv",
+        logits=results("segmentation/virtues/{sample_id}/class_logits.tif"),
+        classes=results("segmentation/virtues/{sample_id}/classes.csv"),
         # from the method's segmentation rule
-        mask=OUT + "/segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif",
+        mask=results("segmentation/{seg_method}/{sample_id}/cell_boundaries_mask.tif"),
     output:
-        cell_types=OUT + "/cell_type_annotation/virtues/{seg_method}/{sample_id}/cell_types.csv",
+        cell_types=results("cell_type_annotation/virtues/{seg_method}/{sample_id}/cell_types.csv"),
     params:
         cell_ids="",  # cell_id = mask label
     threads: 1
@@ -43,7 +44,7 @@ rule virtues_cell_types:
         runtime=30,
         mem='32G',
     log:
-        OUT + "/cell_type_annotation/virtues/{seg_method}/{sample_id}/logs/virtues_cell_types.log"
+        results("cell_type_annotation/virtues/{seg_method}/{sample_id}/logs/virtues_cell_types.log")
     container:
         config["containers"]["pixi"]
     shell:
@@ -59,25 +60,25 @@ rule virtues_cell_types:
 
 use rule virtues_cell_types as virtues_cell_types_xenium with:
     input:
-        script=f"{workflow.basedir}/scripts/_cell_type_annotation/virtues_cell_types.py",
+        script=script("_cell_type_annotation/virtues_cell_types.py"),
         # from segmentation_virtues (logits and class names)
-        logits=OUT + "/segmentation/virtues/{sample_id}/class_logits.tif",
-        classes=OUT + "/segmentation/virtues/{sample_id}/classes.csv",
+        logits=results("segmentation/virtues/{sample_id}/class_logits.tif"),
+        classes=results("segmentation/virtues/{sample_id}/classes.csv"),
         # from xenium_cell_mask: 10x cells of the XENIUM_CT_SEG segmentation and their cell_ids
-        mask=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif",
-        cell_ids=OUT + "/dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv",
+        mask=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_boundaries_mask.tif"),
+        cell_ids=results("dimensionality_reduction/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_ids.csv"),
     output:
-        cell_types=OUT + "/cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv",
+        cell_types=results("cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv"),
     params:
         cell_ids=lambda wc, input: input.cell_ids,  # cell_id = 10x cell_id
     log:
-        OUT + "/cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/virtues_cell_types.log"
+        results("cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/logs/virtues_cell_types.log")
 
 # VirTues cell types of every method in VIRTUES_CT_SEG_METHODS (on its own samples), and of the Xenium cells
 # (samples imaged on Xenium)
 rule virtues_all:
     input:
-        seg_targets(OUT + "/cell_type_annotation/virtues/{seg_method}/{sample_id}/cell_types.csv",
+        seg_targets(results("cell_type_annotation/virtues/{seg_method}/{sample_id}/cell_types.csv"),
                     methods=VIRTUES_CT_SEG_METHODS),
-        expand(OUT + "/cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv",
+        expand(results("cell_type_annotation/virtues/xenium_" + XENIUM_CT_SEG + "/{sample_id}/cell_types.csv"),
                sample_id=VIRTUES_XENIUM_SAMPLE_IDS),

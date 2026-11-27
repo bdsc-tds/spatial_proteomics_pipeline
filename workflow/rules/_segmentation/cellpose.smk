@@ -3,17 +3,18 @@
 # Quantified in quantify_cells.smk
 
 # variables defined in other .smk files:
-# OUT:           defined in Snakefile
+# results:       defined in Snakefile
+# script:        defined in Snakefile
 # GPU_PARTITION: defined in Snakefile
 # GPU_EXTRA:     defined in Snakefile
 
-cellpose_dir = OUT + "/segmentation/cellpose/{sample_id}/"
+cellpose_dir = results("segmentation/cellpose/{sample_id}/")
 
 rule segmentation_cellpose:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/cellpose_segmentation.py",
+        script=script("_segmentation/cellpose_segmentation.py"),
         # from prepare_segmentation_input
-        image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
+        image=results("image_preparation/{sample_id}/segmentation_input.ome.tif"),
     output:
         cells=cellpose_dir + "cell_boundaries_mask.tif",
         nuclei=cellpose_dir + "nuclei_boundaries_mask.tif",

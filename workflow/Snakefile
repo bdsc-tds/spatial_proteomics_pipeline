@@ -36,7 +36,19 @@ print(f"Deployment Mode: {'SINGULARITY' if IS_CONTAINER else 'LOCAL PIXI ENV'}",
 if not workflow.configfiles:
     raise WorkflowError("no config: run through run.sh / --profile profiles/slurm, or pass --configfile")
 CONFIG_PATH = os.path.realpath(workflow.configfiles[-1])
-OUT = config["output_path"].rstrip("/")
+OUTPUT_PATH = config["output_path"].rstrip("/") + "/"
+
+
+# --- path helpers shared by the rules ---
+def results(path):
+    """Path under output_path ({output_path}/<step>/...), logs included (<step>/.../logs/)."""
+    return OUTPUT_PATH + path
+
+
+def script(path):
+    """Path of a script under workflow/scripts/."""
+    return f"{workflow.basedir}/scripts/{path}"
+
 
 # --- samples: {tissue/panel/donor/sample: image, Xenium run, panel metadata} ---
 EXPERIMENTS_PATH = resolve_path(config["experiments"], CONFIG_PATH)
@@ -72,7 +84,7 @@ def use_background_subtraction(sample_id):
     return config["run"]["background_subtraction"] and SAMPLES[sample_id]["panel_meta"]["background_subtraction"]
 
 
-BACKSUB_IMAGE = OUT + "/background_subtraction/{sample_id}/image.ome.tiff"
+BACKSUB_IMAGE = results("background_subtraction/{sample_id}/image.ome.tiff")
 
 
 def source_image(wildcards):

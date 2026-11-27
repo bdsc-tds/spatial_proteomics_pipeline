@@ -3,7 +3,7 @@
 Reads the cell counts tables written by plot_alignment.py ({seg_method}/counts.csv, matches to the
 default Xenium segmentation, named by --xenium_seg: nuclear_expansion, or multimodal with the 10x
 multimodal cell segmentation kit), one per alignment method, max_width, sample and segmentation
-method; the wildcards are recovered from the paths, relative to --root (OUT/xenium_alignment):
+method; the wildcards are recovered from the paths, relative to --root ({output_path}/xenium_alignment):
   {align_method}/max_width_{max_width}/{sample_id}/figures/{seg_method}/counts.csv
 For every sample whose Xenium run also has a Proseg segmentation
 (xenium/processed/segmentation/proseg/<raw run path>/raw_results), the proteomics cells are matched
@@ -47,8 +47,8 @@ MODALITY_COLORS = ["#4D4D4D", "#4C72E0", "#F28E2B", "#E15FA4", "#76B041"]
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--counts", nargs="+", required=True, help="plot_alignment counts tables")
-    parser.add_argument("--root", required=True, help="OUT/xenium_alignment, the counts paths are parsed from there")
-    parser.add_argument("--seg_root", required=True, help="OUT/segmentation, with {seg_method}/{sample_id}/feature_table.csv")
+    parser.add_argument("--root", required=True, help="{output_path}/xenium_alignment, the counts paths are parsed from there")
+    parser.add_argument("--seg_root", required=True, help="{output_path}/segmentation, with {seg_method}/{sample_id}/feature_table.csv")
     parser.add_argument("--experiments", required=True, help="experiments.yml, for the Xenium run of each sample")
     parser.add_argument("--max_dist", type=float, default=5, help="max distance (µm) between matched cells")
     parser.add_argument("--refine", action="store_true",

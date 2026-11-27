@@ -3,17 +3,18 @@
 
 # variables defined in other .smk files:
 # os, np, tifffile: imported in Snakefile
-# OUT:           defined in Snakefile
+# results:       defined in Snakefile
+# script:        defined in Snakefile
 # GPU_PARTITION: defined in Snakefile
 # GPU_EXTRA:     defined in Snakefile
 
-mesmer_dir = OUT + "/segmentation/mesmer/{sample_id}/"
+mesmer_dir = results("segmentation/mesmer/{sample_id}/")
 
 rule segmentation_mesmer:
     input:
-        script=f"{workflow.basedir}/scripts/_segmentation/mesmer.py",
+        script=script("_segmentation/mesmer.py"),
         # from prepare_segmentation_input
-        image=OUT + "/image_preparation/{sample_id}/segmentation_input.ome.tif",
+        image=results("image_preparation/{sample_id}/segmentation_input.ome.tif"),
     output:
         cells=mesmer_dir + "cell_boundaries_mask.tif",
         nuclei=mesmer_dir + "nuclei_boundaries_mask.tif",

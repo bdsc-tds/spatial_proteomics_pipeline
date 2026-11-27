@@ -196,6 +196,9 @@ subtraction is the exception: its switch also chooses the image every step reads
 
 ## Extending
 
+Rule files build paths with two helpers of `workflow/Snakefile`: `results("segmentation/...")` for outputs and
+logs under `output_path`, `script("_segmentation/x.py")` for scripts under `workflow/scripts/`.
+
 - **New panel / technology:** put the images in `{raw}/{tissue}/{panel}/{donor}/{sample}/`, run
   `update-experiments` and fill in the new panel's `_` keys. qptiff and OME-TIFF are read by
   `workflow/scripts/utils/readwrite.py`; another format only needs support there.
