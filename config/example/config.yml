@@ -82,7 +82,7 @@ xenium_alignment:
       max_neighbour_dev_um: 15  # control points differing more from the median shift of their neighbouring tiles are dropped
 
 cell_type_annotation:
-  methods: [tacit, virtues]  # one rule file each (workflow/rules/_cell_type_annotation/{method}.smk); virtues labels the VirTues mask and the Xenium cells
+  methods: [tacit, virtues]  # one rule file each (workflow/rules/_cell_type_annotation/{method}.smk); virtues labels every mask (cell_type_annotation: virtues: seg_methods, default all) and the Xenium cells
   # Xenium segmentation (processed/segmentation/{seg} of xenium_analysis_pipeline) whose cells also get
   # cell types and embeddings, for panels with _technology: xenium
   xenium_segmentation: 10x_mm_5um
